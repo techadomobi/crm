@@ -22,6 +22,12 @@ export default function BackendApiPanel() {
   );
 
   const runAction = async (action: Action) => {
+    const savedToken = localStorage.getItem('repowire_token')?.trim();
+    if (!savedToken) {
+      setError('Save a bearer token first, then run API actions.');
+      return;
+    }
+
     setError(null);
     setLoadingAction(action);
 
@@ -70,7 +76,12 @@ export default function BackendApiPanel() {
           </div>
           <button
             onClick={() => {
-              localStorage.setItem('repowire_token', tokenInput.trim());
+              const cleaned = tokenInput
+                .trim()
+                .replace(/^['\"]+|['\"]+$/g, '')
+                .replace(/^Bearer\s+/i, '');
+              localStorage.setItem('repowire_token', cleaned);
+              setTokenInput(cleaned);
               setError(null);
             }}
             className="rounded-xl bg-cyan-700 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-800 transition-colors"

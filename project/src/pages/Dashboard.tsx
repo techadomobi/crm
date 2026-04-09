@@ -233,6 +233,8 @@ export default function Dashboard() {
         source: 'mock',
       }));
       setLiveError(null);
+      setChartPoints(buildFallbackRevenueSeries());
+      setLivePipelineRows(pipelineStages);
       return;
     }
 
@@ -347,7 +349,6 @@ export default function Dashboard() {
       loadLiveKpis();
     } else {
       setLiveError(null);
-      // setIsLoadingLive(false); // Removed the call to setIsLoadingLive
     }
   }, []);
 
