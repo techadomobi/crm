@@ -40,6 +40,24 @@ const toFormData = (body: Record<string, unknown>) => {
   const formData = new FormData();
   Object.entries(body).forEach(([key, value]) => {
     if (value === null || value === undefined) return;
+
+    if (value instanceof Blob) {
+      formData.append(key, value);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (item === null || item === undefined) return;
+        if (item instanceof Blob) {
+          formData.append(key, item);
+        } else {
+          formData.append(key, String(item));
+        }
+      });
+      return;
+    }
+
     formData.append(key, String(value));
   });
   return formData;

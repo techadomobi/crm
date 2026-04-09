@@ -24,6 +24,13 @@ export interface ConversionListQuery extends ListQuery {
   searchBy?: 'offerid' | 'publisherId' | 'advertiserId' | 'clickId';
 }
 
+export interface OfferListQuery extends ListQuery {
+  page?: number;
+  search?: string;
+}
+
+export type CreateOfferPayload = Record<string, unknown>;
+
 export const repowireApi = {
   adminLogin: (payload: AdminLoginPayload) =>
     apiRequest('/admin/login', {
@@ -76,5 +83,18 @@ export const repowireApi = {
     apiRequest('/conversion/getConversionAccordingToDate', {
       method: 'GET',
       query,
+    }),
+
+  offerList: (query?: OfferListQuery) =>
+    apiRequest('/offer/offerList', {
+      method: 'GET',
+      query,
+    }),
+
+  createOffer: (payload: CreateOfferPayload) =>
+    apiRequest('/offer/createOffr', {
+      method: 'POST',
+      body: payload,
+      asFormData: true,
     }),
 };
