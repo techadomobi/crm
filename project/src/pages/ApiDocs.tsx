@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpenText, Search, ShieldCheck, Code2, ExternalLink, FileText, PlayCircle, ServerCog, Layers3 } from 'lucide-react';
 
 const API_DOCS_URL = 'https://cl.repowire.com/api-docs/';
@@ -384,6 +384,8 @@ export default function ApiDocs() {
   const [search, setSearch] = useState('');
   const [isRunningBatch, setIsRunningBatch] = useState(false);
   const [lastRunSummary, setLastRunSummary] = useState<string>('No endpoint run yet.');
+  const isRunningBatchRef = useRef(false);
+  const backgroundCursorRef = useRef(0);
   const categories = useMemo(() => ['All', ...new Set(endpoints.map((endpoint) => endpoint.category))], []);
 
   const getCategoryFromHash = () => {
@@ -479,7 +481,8 @@ export default function ApiDocs() {
   };
 
   const runEndpoints = async (list: Endpoint[]) => {
-    if (isRunningBatch) return;
+    if (isRunningBatchRef.current) return;
+    isRunningBatchRef.current = true;
     setIsRunningBatch(true);
     const startedAt = Date.now();
 
@@ -498,6 +501,7 @@ export default function ApiDocs() {
 
     const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
     setLastRunSummary(`Triggered ${list.length} requests in ${elapsed}s. Success: ${success}, Failed: ${failed}.`);
+    isRunningBatchRef.current = false;
     setIsRunningBatch(false);
   };
 
@@ -516,20 +520,31 @@ export default function ApiDocs() {
   }, []);
 
   useEffect(() => {
-    // Keep lightweight background traffic so API calls appear in Network tab
+    // Keep rotating background traffic so all APIs appear over time in Network tab,
     // even if DevTools is opened after initial page load.
-    const probeEndpoints = endpoints.slice(0, 8);
-    if (probeEndpoints.length === 0) return;
+    if (endpoints.length === 0) return;
 
+    const chunkSize = 24;
     const runProbe = () => {
+      const total = endpoints.length;
+      const start = backgroundCursorRef.current % total;
+      const probeEndpoints: Endpoint[] = [];
+
+      for (let i = 0; i < Math.min(chunkSize, total); i += 1) {
+        probeEndpoints.push(endpoints[(start + i) % total]);
+      }
+
+      backgroundCursorRef.current = (start + chunkSize) % total;
       void runEndpoints(probeEndpoints);
     };
 
-    const intervalId = window.setInterval(runProbe, 12000);
+    const intervalId = window.setInterval(runProbe, 8000);
     const onFocus = () => runProbe();
     const onVisible = () => {
       if (document.visibilityState === 'visible') runProbe();
     };
+
+    runProbe();
 
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisible);
