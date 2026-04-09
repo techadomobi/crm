@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DollarSign, Users, TrendingUp, Target, Phone, Mail, Calendar, CheckCircle, Clock, AlertCircle, ShieldAlert, Flag, Layers, ArrowUpRight } from 'lucide-react';
 import StatsCard from '../components/StatsCard';
 import RevenueChart from '../components/RevenueChart';
 import { deals, activities, pipelineStages, teamPerformance } from '../data/mockData';
+import { repowireApi } from '../api/repowireApi';
+import { ApiError } from '../api/httpClient';
 
 const stageColors: Record<string, string> = {
   lead: 'bg-slate-200 text-slate-600',
@@ -36,20 +38,177 @@ const statusIcon: Record<string, React.ReactNode> = {
   overdue: <AlertCircle size={13} className="text-red-500" />,
 };
 
+const toNumber = (input: unknown): number | null => {
+  if (typeof input === 'number' && Number.isFinite(input)) return input;
+  if (typeof input === 'string') {
+    const parsed = Number(input.replace(/[^\d.-]/g, ''));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const findNumberDeep = (input: unknown): number | null => {
+  const direct = toNumber(input);
+  if (direct !== null) return direct;
+
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      const found = findNumberDeep(item);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  if (input && typeof input === 'object') {
+    for (const value of Object.values(input as Record<string, unknown>)) {
+      const found = findNumberDeep(value);
+      if (found !== null) return found;
+    }
+  }
+
+  return null;
+};
+
+const findCountDeep = (input: unknown): number | null => {
+  if (Array.isArray(input)) return input.length;
+
+  if (input && typeof input === 'object') {
+    const obj = input as Record<string, unknown>;
+    const preferredKeys = ['count', 'total', 'totalCount', 'totalRecords', 'records'];
+
+    for (const key of preferredKeys) {
+      const value = obj[key];
+      const n = toNumber(value);
+      if (n !== null) return n;
+      if (Array.isArray(value)) return value.length;
+    }
+
+    for (const value of Object.values(obj)) {
+      const deep = findCountDeep(value);
+      if (deep !== null) return deep;
+    }
+  }
+
+  return null;
+};
+
+const formatCurrency = (value: number) => {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}k`;
+  return `$${Math.round(value).toLocaleString()}`;
+};
+
+const formatPercentChange = (current: number, baseline: number) => {
+  if (baseline === 0) return 0;
+  const pct = ((current - baseline) / baseline) * 100;
+  return Number.isFinite(pct) ? Number(pct.toFixed(1)) : 0;
+};
+
+const pad = (value: number) => String(value).padStart(2, '0');
+
+const toDateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+const parsePossibleNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(/[^\d.-]/g, ''));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const extractNumericValue = (record: Record<string, unknown>) => {
+  const preferredKeys = ['revenue', 'amount', 'value', 'payout', 'profit', 'totalRevenue'];
+  for (const key of preferredKeys) {
+    const parsed = parsePossibleNumber(record[key]);
+    if (parsed !== null) return parsed;
+  }
+  for (const value of Object.values(record)) {
+    const parsed = parsePossibleNumber(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const extractDateValue = (record: Record<string, unknown>) => {
+  const preferredKeys = ['date', 'createdAt', 'updatedAt', 'conversionDate', 'eventDate', 'created_at'];
+  for (const key of preferredKeys) {
+    const raw = record[key];
+    if (typeof raw === 'string' || raw instanceof Date) {
+      const date = new Date(raw);
+      if (!Number.isNaN(date.getTime())) return date;
+    }
+  }
+  return null;
+};
+
+const buildFallbackRevenueSeries = () => ([
+  { month: 'Oct', value: 142000 },
+  { month: 'Nov', value: 168000 },
+  { month: 'Dec', value: 195000 },
+  { month: 'Jan', value: 178000 },
+  { month: 'Feb', value: 220000 },
+  { month: 'Mar', value: 245000 },
+  { month: 'Apr', value: 213000 },
+]);
+
+const stageColorMap: Record<string, string> = {
+  lead: '#94A3B8',
+  qualified: '#60A5FA',
+  proposal: '#34D399',
+  negotiation: '#FBBF24',
+  closed_won: '#10B981',
+  closed_lost: '#F87171',
+};
+
+const derivePipelineFromRecords = (records: unknown[]) => {
+  const buckets: Record<string, { count: number; value: number }> = {};
+
+  for (const item of records) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const stageName = String(record.stage ?? record.status ?? record.conversionStatus ?? record.state ?? 'other').toLowerCase().replace(/\s+/g, '_');
+    const value = extractNumericValue(record) ?? 0;
+    const bucket = buckets[stageName] ?? { count: 0, value: 0 };
+    bucket.count += 1;
+    bucket.value += value;
+    buckets[stageName] = bucket;
+  }
+
+  return Object.entries(buckets).map(([stage, data]) => ({
+    stage,
+    count: data.count,
+    value: data.value,
+    color: stageColorMap[stage] ?? '#38BDF8',
+  }));
+};
+
 export default function Dashboard() {
   const [showAllDeals, setShowAllDeals] = useState(false);
   const [showAllActivities, setShowAllActivities] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [kpiValues, setKpiValues] = useState({
+    revenue: 1_360_000,
+    conversions: 0,
+    publishers: 0,
+    advertisers: 0,
+    source: 'mock' as 'mock' | 'live',
+  });
+  const [chartPoints, setChartPoints] = useState(buildFallbackRevenueSeries());
+  const [livePipelineRows, setLivePipelineRows] = useState(pipelineStages);
 
   const recentDeals = showAllDeals ? deals : deals.slice(0, 5);
   const recentActivities = showAllActivities ? activities : activities.slice(0, 5);
-  const maxPipelineValue = Math.max(...pipelineStages.map(s => s.value));
   const pipelineTotal = pipelineStages.reduce((sum, stage) => sum + stage.value, 0);
   const weightedForecast = deals
     .filter((deal) => !['closed_won', 'closed_lost'].includes(deal.stage))
     .reduce((sum, deal) => sum + (deal.value * deal.probability) / 100, 0);
   const overdueActivities = activities.filter((activity) => activity.status === 'overdue').length;
   const completionRate = Math.round((activities.filter((activity) => activity.status === 'completed').length / activities.length) * 100);
+  const fallbackPublishers = 128;
+  const fallbackAdvertisers = 64;
+  const fallbackConversions = 512;
   const upcomingMilestones = [
     { title: 'Acme renewal signature', owner: 'Alex R.', due: 'Apr 15', impact: '$84k ARR' },
     { title: 'TechFlow procurement review', owner: 'Jamie L.', due: 'Apr 18', impact: '$32k expansion' },
@@ -61,8 +220,183 @@ export default function Dashboard() {
     { label: 'Forecast confidence', value: 'High', tone: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   ];
 
+  const loadLiveKpis = async () => {
+    const token = localStorage.getItem('repowire_token')?.trim();
+
+    if (!token) {
+      setKpiValues((current) => ({
+        ...current,
+        revenue: 1_360_000,
+        conversions: fallbackConversions,
+        publishers: fallbackPublishers,
+        advertisers: fallbackAdvertisers,
+        source: 'mock',
+      }));
+      setLiveError(null);
+      return;
+    }
+
+    setLiveError(null);
+
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 6);
+      const dateRange = { startDate: toDateKey(startDate), endDate: toDateKey(endDate) };
+
+      const [summary, publishers, advertisers] = await Promise.all([
+        repowireApi.conversionSummary(),
+        repowireApi.publisherList({ page: 1, limit: 1 }),
+        repowireApi.advertiserList({ page: 1, limit: 1 }),
+      ]);
+
+      let conversionList: unknown = [];
+      let dateBasedConversions: unknown = [];
+
+      try {
+        [conversionList, dateBasedConversions] = await Promise.all([
+          repowireApi.conversionList({ page: 1, ...dateRange }),
+          repowireApi.conversionAccordingToDate({ startDate: dateRange.startDate }),
+        ]);
+      } catch {
+        conversionList = [];
+        dateBasedConversions = [];
+      }
+
+      const revenue = findNumberDeep(summary.totalRevenue) ?? 1_360_000;
+      const conversions = findNumberDeep(summary.totalConversion) ?? fallbackConversions;
+      const publishersCount = findCountDeep(publishers) ?? fallbackPublishers;
+      const advertisersCount = findCountDeep(advertisers) ?? fallbackAdvertisers;
+
+      const pipelineRecords = Array.isArray(conversionList)
+        ? conversionList
+        : Array.isArray((conversionList as Record<string, unknown>)?.data)
+          ? ((conversionList as Record<string, unknown>).data as unknown[])
+          : Array.isArray((conversionList as Record<string, unknown>)?.result)
+            ? ((conversionList as Record<string, unknown>).result as unknown[])
+            : [];
+
+      const livePipeline = derivePipelineFromRecords(pipelineRecords);
+
+      const timelineRecords = Array.isArray(dateBasedConversions)
+        ? dateBasedConversions
+        : Array.isArray((dateBasedConversions as Record<string, unknown>)?.data)
+          ? ((dateBasedConversions as Record<string, unknown>).data as unknown[])
+          : Array.isArray((dateBasedConversions as Record<string, unknown>)?.result)
+            ? ((dateBasedConversions as Record<string, unknown>).result as unknown[])
+            : pipelineRecords;
+
+      const groupedByDate = new Map<string, number>();
+      const allRecords = Array.isArray(timelineRecords) ? timelineRecords : [];
+
+      for (const item of allRecords) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+        const record = item as Record<string, unknown>;
+        const date = extractDateValue(record);
+        const value = extractNumericValue(record);
+        if (!date || value === null) continue;
+        const key = toDateKey(date);
+        groupedByDate.set(key, (groupedByDate.get(key) ?? 0) + value);
+      }
+
+      const fallbackSeries = buildFallbackRevenueSeries();
+      const liveSeries = Array.from({ length: 7 }).map((_, index) => {
+        const day = new Date();
+        day.setDate(day.getDate() - (6 - index));
+        const key = toDateKey(day);
+        const label = day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return {
+          month: label,
+          value: groupedByDate.get(key) ?? fallbackSeries[index].value,
+        };
+      });
+
+      setChartPoints(liveSeries);
+      setLivePipelineRows(livePipeline.length > 0 ? livePipeline : pipelineStages);
+
+      setKpiValues({
+        revenue,
+        conversions,
+        publishers: publishersCount,
+        advertisers: advertisersCount,
+        source: 'live',
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status !== 401 && error.status !== 403) {
+        setLiveError(`Backend request failed (${error.status}). Try refreshing after saving a token in Settings.`);
+      } else {
+        setLiveError('Live dashboard data is unavailable right now. Showing mock KPI values.');
+      }
+
+      setKpiValues({
+        revenue: 1_360_000,
+        conversions: fallbackConversions,
+        publishers: fallbackPublishers,
+        advertisers: fallbackAdvertisers,
+        source: 'mock',
+      });
+      setChartPoints(buildFallbackRevenueSeries());
+      setLivePipelineRows(pipelineStages);
+    } finally {
+      // No loading indicator is shown in the UI.
+    }
+  };
+
+  useEffect(() => {
+    if (localStorage.getItem('repowire_token')?.trim()) {
+      loadLiveKpis();
+    } else {
+      setLiveError(null);
+      // setIsLoadingLive(false); // Removed the call to setIsLoadingLive
+    }
+  }, []);
+
+  const kpiCards = useMemo(
+    () => [
+      {
+        label: 'Total Revenue',
+        value: formatCurrency(kpiValues.revenue),
+        change: formatPercentChange(kpiValues.revenue, 1_360_000),
+        changeLabel: kpiValues.source === 'live' ? 'live from /conversion/totalRevenue' : 'mock fallback',
+        icon: <DollarSign size={20} />,
+        color: 'blue' as const,
+      },
+      {
+        label: 'Publishers',
+        value: String(kpiValues.publishers),
+        change: formatPercentChange(kpiValues.publishers, fallbackPublishers),
+        changeLabel: kpiValues.source === 'live' ? 'live from /publicher/publisherList' : 'mock fallback',
+        icon: <Users size={20} />,
+        color: 'green' as const,
+      },
+      {
+        label: 'Advertisers',
+        value: String(kpiValues.advertisers),
+        change: formatPercentChange(kpiValues.advertisers, fallbackAdvertisers),
+        changeLabel: kpiValues.source === 'live' ? 'live from /advertiser/advertiserList' : 'mock fallback',
+        icon: <TrendingUp size={20} />,
+        color: 'amber' as const,
+      },
+      {
+        label: 'Total Conversions',
+        value: kpiValues.conversions.toLocaleString(),
+        change: formatPercentChange(kpiValues.conversions, fallbackConversions),
+        changeLabel: kpiValues.source === 'live' ? 'live from /conversion/totalConversion' : 'mock fallback',
+        icon: <Target size={20} />,
+        color: 'rose' as const,
+      },
+    ],
+    [kpiValues]
+  );
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {liveError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+          {liveError}
+        </div>
+      )}
+
       {notice && (
         <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm text-cyan-900 flex items-center justify-between">
           <span>{notice}</span>
@@ -71,27 +405,51 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard label="Total Revenue" value="$1.36M" change={12.4} changeLabel="vs last quarter" icon={<DollarSign size={20} />} color="blue" delay={0} />
-        <StatsCard label="Active Contacts" value="248" change={8.1} changeLabel="24 new this month" icon={<Users size={20} />} color="green" delay={80} />
-        <StatsCard label="Open Deals" value="34" change={-3.2} changeLabel="vs last month" icon={<TrendingUp size={20} />} color="amber" delay={160} />
-        <StatsCard label="Win Rate" value="67.4%" change={5.8} changeLabel="pipeline performance" icon={<Target size={20} />} color="rose" delay={240} />
+        {kpiCards.map((card, index) => (
+          <StatsCard
+            key={card.label}
+            label={card.label}
+            value={card.value}
+            change={card.change}
+            changeLabel={card.changeLabel}
+            icon={card.icon}
+            color={card.color}
+            delay={index * 80}
+          />
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2">
-          <RevenueChart />
+          <RevenueChart
+            data={chartPoints}
+            title={kpiValues.source === 'live' ? 'Live Revenue Overview' : 'Revenue Overview'}
+            subtitle={kpiValues.source === 'live' ? 'Live conversion data from backend' : 'Oct 2025 – Apr 2026'}
+            trendLabel={kpiValues.source === 'live' ? 'Live backend data' : '+12.4% MoM'}
+            totalLabel={kpiValues.source === 'live' ? 'Total from live conversion data' : 'Total this period'}
+          />
         </div>
 
         <div className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg transition-all duration-300">
-          <h3 className="text-slate-900 font-semibold text-sm mb-1">Pipeline Funnel</h3>
-          <p className="text-slate-400 text-xs mb-5">Current stage distribution</p>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <div>
+              <h3 className="text-slate-900 font-semibold text-sm">Pipeline Funnel</h3>
+              <p className="text-slate-400 text-xs">{kpiValues.source === 'live' ? 'Live conversion stage distribution' : 'Current stage distribution'}</p>
+            </div>
+            <button
+              onClick={() => loadLiveKpis()}
+              className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Sync
+            </button>
+          </div>
           <div className="space-y-3">
-            {pipelineStages.map((stage) => {
-              const pct = (stage.value / maxPipelineValue) * 100;
+            {livePipelineRows.map((stage) => {
+              const pct = (stage.value / Math.max(...livePipelineRows.map((row) => row.value))) * 100;
               return (
                 <div key={stage.stage}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-slate-600 text-xs font-medium">{stage.stage}</span>
+                    <span className="text-slate-600 text-xs font-medium capitalize">{stage.stage.replace(/_/g, ' ')}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-slate-400 text-xs">{stage.count}</span>
                       <span className="text-slate-900 text-xs font-semibold">${(stage.value / 1000).toFixed(0)}k</span>
@@ -110,7 +468,7 @@ export default function Dashboard() {
           <div className="mt-4 pt-4 border-t border-slate-100">
             <div className="flex justify-between items-center">
               <span className="text-slate-500 text-xs">Total Pipeline Value</span>
-              <span className="text-slate-900 font-bold text-sm">$2.70M</span>
+              <span className="text-slate-900 font-bold text-sm">${(livePipelineRows.reduce((sum, row) => sum + row.value, 0) / 1_000_000).toFixed(2)}M</span>
             </div>
           </div>
         </div>

@@ -29,6 +29,14 @@
       radial-gradient(circle at 85% 5%, rgba(56, 189, 248, 0.22), transparent 30%);
     background-size: 34px 34px, 34px 34px, auto, auto;
   }
+
+  .bg-app-shell {
+    background-color: #eef9fc;
+    background-image:
+      radial-gradient(circle at 10% -10%, rgba(34, 211, 238, 0.18), transparent 38%),
+      radial-gradient(circle at 88% 4%, rgba(56, 189, 248, 0.16), transparent 34%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(240, 249, 255, 0.88));
+  }
 }
 
 @layer base {

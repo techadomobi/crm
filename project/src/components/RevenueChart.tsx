@@ -1,8 +1,27 @@
 import { revenueData } from '../data/mockData';
 
-export default function RevenueChart() {
-  const max = Math.max(...revenueData.map(d => d.value));
-  const min = Math.min(...revenueData.map(d => d.value));
+export interface RevenuePoint {
+  month: string;
+  value: number;
+}
+
+interface RevenueChartProps {
+  data?: RevenuePoint[];
+  title?: string;
+  subtitle?: string;
+  trendLabel?: string;
+  totalLabel?: string;
+}
+
+export default function RevenueChart({
+  data = revenueData,
+  title = 'Revenue Overview',
+  subtitle = 'Oct 2025 – Apr 2026',
+  trendLabel = '+12.4% MoM',
+  totalLabel = 'Total this period',
+}: RevenueChartProps) {
+  const max = Math.max(...data.map(d => d.value));
+  const min = Math.min(...data.map(d => d.value));
   const range = max - min;
 
   const W = 560;
@@ -10,8 +29,8 @@ export default function RevenueChart() {
   const padX = 10;
   const padY = 10;
 
-  const pts = revenueData.map((d, i) => {
-    const x = padX + (i / (revenueData.length - 1)) * (W - padX * 2);
+  const pts = data.map((d, i) => {
+    const x = padX + (i / Math.max(data.length - 1, 1)) * (W - padX * 2);
     const y = H - padY - ((d.value - min) / range) * (H - padY * 2);
     return { x, y, ...d };
   });
@@ -23,18 +42,18 @@ export default function RevenueChart() {
     <div className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg transition-all duration-300">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h3 className="text-slate-900 font-semibold text-sm">Revenue Overview</h3>
-          <p className="text-slate-400 text-xs mt-0.5">Oct 2025 – Apr 2026</p>
+          <h3 className="text-slate-900 font-semibold text-sm">{title}</h3>
+          <p className="text-slate-400 text-xs mt-0.5">{subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2.5 py-1 rounded-full">+12.4% MoM</span>
+          <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2.5 py-1 rounded-full">{trendLabel}</span>
         </div>
       </div>
 
       <div className="flex items-end gap-4 mb-4">
         <div>
-          <p className="text-2xl font-bold text-slate-900">$1.36M</p>
-          <p className="text-slate-400 text-xs">Total this period</p>
+          <p className="text-2xl font-bold text-slate-900">${(data.reduce((sum, point) => sum + point.value, 0) / 1_000_000).toFixed(2)}M</p>
+          <p className="text-slate-400 text-xs">{totalLabel}</p>
         </div>
       </div>
 

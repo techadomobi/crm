@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { User, Bell, Shield, CreditCard, Users, Globe, Mail, Phone, ChevronRight } from 'lucide-react';
+import BackendApiPanel from '../components/BackendApiPanel';
 
 const sections = [
   {
@@ -40,6 +41,8 @@ export default function Settings() {
           <button onClick={() => setNotice(null)} className="text-xs font-semibold text-cyan-700 hover:text-cyan-900">Dismiss</button>
         </div>
       )}
+
+      <BackendApiPanel />
 
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
         <div className="px-5 py-4 border-b border-slate-100">

@@ -6,12 +6,15 @@ import Contacts from './pages/Contacts';
 import Deals from './pages/Deals';
 import Activities from './pages/Activities';
 import Reports from './pages/Reports';
+import ApiDocs from './pages/ApiDocs';
 import Settings from './pages/Settings';
 import CrmModuleDetails from './pages/CrmModuleDetails';
 import AuthPortal from './pages/AuthPortal';
 import { NavPage } from './types';
 
 export default function App() {
+  const normalizedPath = window.location.pathname.replace(/\/+$/, '') || '/';
+  const isPublicApiDocsRoute = normalizedPath === '/api/docs';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
@@ -24,12 +27,25 @@ export default function App() {
       case 'deals': return <Deals />;
       case 'activities': return <Activities />;
       case 'reports': return <Reports />;
+      case 'apiDocs': return <ApiDocs />;
       case 'settings': return <Settings />;
       default: return <CrmModuleDetails activePage={activePage} />;
     }
   };
 
   if (!isAuthenticated) {
+    if (isPublicApiDocsRoute) {
+      return (
+        <div className="min-h-screen bg-app-shell">
+          <main className="min-h-screen p-6">
+            <div className="mx-auto max-w-[1600px] pt-2">
+              <ApiDocs />
+            </div>
+          </main>
+        </div>
+      );
+    }
+
     return (
       <AuthPortal
         mode={authMode}
@@ -43,7 +59,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-app-shell">
       <Sidebar
         activePage={activePage}
         onNavigate={setActivePage}

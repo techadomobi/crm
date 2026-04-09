@@ -56,6 +56,7 @@ export type NavPage =
   | 'smartLink'
   | 'notifications'
   | 'support'
+  | 'apiDocs'
   | 'settings';
 
 export interface Contact {

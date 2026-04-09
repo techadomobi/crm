@@ -21,6 +21,7 @@ const pageTitles: Partial<Record<NavPage, { title: string; subtitle: string }>> 
   deals: { title: 'Deals Pipeline', subtitle: 'Track deals across all stages' },
   activities: { title: 'Activities', subtitle: 'Calls, emails, meetings, and tasks' },
   reports: { title: 'Reports & Analytics', subtitle: 'Insights into your sales performance' },
+  apiDocs: { title: 'API Docs', subtitle: 'Swagger-backed endpoint reference and usage examples' },
   settings: { title: 'Settings', subtitle: 'Manage your account and preferences' },
 };
 
@@ -49,7 +50,7 @@ export default function Header({ activePage, sidebarCollapsed, onSignOut }: Head
 
   return (
     <header
-      className={`fixed top-0 right-0 z-20 bg-white border-b border-slate-200 transition-all duration-300 ${
+      className={`fixed top-0 right-0 z-20 border-b border-white/70 bg-white/85 backdrop-blur-md transition-all duration-300 ${
         sidebarCollapsed ? 'left-16' : 'left-60'
       }`}
     >
