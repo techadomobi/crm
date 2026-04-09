@@ -501,6 +501,46 @@ export default function ApiDocs() {
     setIsRunningBatch(false);
   };
 
+  useEffect(() => {
+    // Auto-trigger once per tab session so Network tab always shows live API traffic.
+    const runKey = 'repowire_api_docs_autorun_all';
+    try {
+      if (window.sessionStorage.getItem(runKey) === '1') return;
+      window.sessionStorage.setItem(runKey, '1');
+      setLastRunSummary('Auto-run started for all endpoints. Check Network tab and filter by cl.repowire.com');
+      void runEndpoints(endpoints);
+    } catch {
+      // If sessionStorage is blocked, still try once for current render.
+      void runEndpoints(endpoints);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Keep lightweight background traffic so API calls appear in Network tab
+    // even if DevTools is opened after initial page load.
+    const probeEndpoints = endpoints.slice(0, 8);
+    if (probeEndpoints.length === 0) return;
+
+    const runProbe = () => {
+      void runEndpoints(probeEndpoints);
+    };
+
+    const intervalId = window.setInterval(runProbe, 12000);
+    const onFocus = () => runProbe();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') runProbe();
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
   return (
     <div className="space-y-5 animate-fade-in">
       <section className="rounded-2xl border border-sky-100 bg-gradient-to-r from-cyan-50 to-sky-50 p-5 shadow-sm">
