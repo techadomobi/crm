@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DollarSign, Users, TrendingUp, Target, Phone, Mail, Calendar, CheckCircle, Clock, AlertCircle, ShieldAlert, Flag, Layers, ArrowUpRight } from 'lucide-react';
 import StatsCard from '../components/StatsCard';
 import RevenueChart from '../components/RevenueChart';
@@ -191,6 +191,19 @@ const isPermissionDenied = (reason: unknown) => {
   return reason instanceof ApiError && (reason.status === 401 || reason.status === 403);
 };
 
+const DASHBOARD_FORBIDDEN_STORAGE_KEY = 'repowire_dashboard_forbidden_endpoints';
+
+const readForbiddenEndpoints = () => {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_FORBIDDEN_STORAGE_KEY);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []);
+  } catch {
+    return new Set<string>();
+  }
+};
+
 export default function Dashboard() {
   const [showAllDeals, setShowAllDeals] = useState(false);
   const [showAllActivities, setShowAllActivities] = useState(false);
@@ -207,6 +220,31 @@ export default function Dashboard() {
   const [livePipelineRows, setLivePipelineRows] = useState(pipelineStages);
   const [liveDeals, setLiveDeals] = useState<Deal[]>([]);
   const [liveActivities, setLiveActivities] = useState<Activity[]>([]);
+  const forbiddenEndpointsRef = useRef<Set<string>>(readForbiddenEndpoints());
+
+  const persistForbiddenEndpoints = () => {
+    localStorage.setItem(
+      DASHBOARD_FORBIDDEN_STORAGE_KEY,
+      JSON.stringify(Array.from(forbiddenEndpointsRef.current))
+    );
+  };
+
+  const runOptional = async <T,>(key: string, request: () => Promise<T>, fallback: T): Promise<T> => {
+    if (forbiddenEndpointsRef.current.has(key)) {
+      return fallback;
+    }
+
+    try {
+      return await request();
+    } catch (error) {
+      if (isPermissionDenied(error)) {
+        forbiddenEndpointsRef.current.add(key);
+        persistForbiddenEndpoints();
+        return fallback;
+      }
+      throw error;
+    }
+  };
 
   const recentDeals = showAllDeals ? liveDeals : liveDeals.slice(0, 5);
   const recentActivities = showAllActivities ? liveActivities : liveActivities.slice(0, 5);
@@ -246,15 +284,25 @@ export default function Dashboard() {
       const dateRange = { startDate: toDateKey(startDate), endDate: toDateKey(endDate) };
 
       const [summaryResult, publishersResult, advertisersResult, dealsResult, activitiesResult] = await Promise.allSettled([
-        repowireApi.conversionSummary(),
+        runOptional('conversionSummary', () => repowireApi.conversionSummary(), null),
         isPublisherRole
           ? Promise.resolve(null)
-          : repowireApi.publisherList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
+          : runOptional(
+            'publisherList',
+            () => repowireApi.publisherList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
+            null
+          ),
         isPublisherRole
           ? Promise.resolve(null)
-          : repowireApi.advertiserList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
-        isPublisherRole ? Promise.resolve([] as Deal[]) : fetchLiveDeals(),
-        fetchLiveActivities(),
+          : runOptional(
+            'advertiserList',
+            () => repowireApi.advertiserList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
+            null
+          ),
+        isPublisherRole
+          ? Promise.resolve([] as Deal[])
+          : runOptional('offerList', () => fetchLiveDeals(), [] as Deal[]),
+        runOptional('activitiesFeed', () => fetchLiveActivities(), [] as Activity[]),
       ]);
 
       const dealsResponse = isFulfilled(dealsResult) ? dealsResult.value : [];
@@ -263,10 +311,18 @@ export default function Dashboard() {
       setLiveActivities(activitiesResponse);
 
       const [conversionListResult, dateBasedResult] = await Promise.allSettled([
-        repowireApi.conversionList({ page: 1, ...dateRange, partners_Id: partnersId || undefined }),
+        runOptional(
+          'conversionList',
+          () => repowireApi.conversionList({ page: 1, ...dateRange, partners_Id: partnersId || undefined }),
+          [] as unknown
+        ),
         isPublisherRole
           ? Promise.resolve([])
-          : repowireApi.conversionAccordingToDate({ startDate: dateRange.startDate }),
+          : runOptional(
+            'conversionAccordingToDate',
+            () => repowireApi.conversionAccordingToDate({ startDate: dateRange.startDate }),
+            [] as unknown
+          ),
       ]);
 
       const conversionList = isFulfilled(conversionListResult) ? conversionListResult.value : [];
@@ -411,25 +467,8 @@ export default function Dashboard() {
     loadLiveKpis();
   }, []);
 
-  useEffect(() => {
-    const onWindowFocus = () => {
-      loadLiveKpis();
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        loadLiveKpis();
-      }
-    };
-
-    window.addEventListener('focus', onWindowFocus);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      window.removeEventListener('focus', onWindowFocus);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, []);
+  // Keep dashboard refresh explicit (initial load + Sync button)
+  // to avoid repeating forbidden endpoint calls in network logs.
 
   const kpiCards = useMemo(
     () => [
