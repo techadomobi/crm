@@ -222,6 +222,7 @@ export default function Dashboard() {
   const [liveActivities, setLiveActivities] = useState<Activity[]>([]);
   const forbiddenEndpointsRef = useRef<Set<string>>(readForbiddenEndpoints());
   const lastAutoSyncAtRef = useRef(0);
+  const isSyncingRef = useRef(false);
 
   const persistForbiddenEndpoints = () => {
     localStorage.setItem(
@@ -272,6 +273,9 @@ export default function Dashboard() {
   ];
 
   const loadLiveKpis = async () => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+
     const partnersId = localStorage.getItem('repowire_partners_id')?.trim();
     const authSource = (localStorage.getItem('repowire_auth_source') ?? '').toLowerCase();
     const isPublisherRole = authSource.includes('/publicher/');
@@ -385,7 +389,7 @@ export default function Dashboard() {
         };
       });
 
-      const liveSuccessCount = [
+      const settledResults = [
         summaryResult,
         publishersResult,
         advertisersResult,
@@ -393,32 +397,19 @@ export default function Dashboard() {
         activitiesResult,
         conversionListResult,
         dateBasedResult,
-      ].filter(isFulfilled).length;
+      ];
 
-      const deniedCount = [
-        summaryResult,
-        publishersResult,
-        advertisersResult,
-        dealsResult,
-        activitiesResult,
-        conversionListResult,
-        dateBasedResult,
-      ].filter((result) => result.status === 'rejected' && isPermissionDenied(result.reason)).length;
+      const liveSuccessCount = settledResults.filter(isFulfilled).length;
+      const rejectedResults = settledResults.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+
+      const deniedCount = rejectedResults.filter((result) => isPermissionDenied(result.reason)).length;
 
       if (liveSuccessCount === 0 && deniedCount === 0) {
         throw new Error('No live dashboard endpoints succeeded.');
       }
 
-      const rejectionReasons = [
-        summaryResult,
-        publishersResult,
-        advertisersResult,
-        dealsResult,
-        activitiesResult,
-        conversionListResult,
-        dateBasedResult,
-      ]
-        .filter((result) => result.status === 'rejected' && !isPermissionDenied(result.reason))
+      const rejectionReasons = rejectedResults
+        .filter((result) => !isPermissionDenied(result.reason))
         .map((result) => {
           const reason = result.reason;
           if (reason instanceof ApiError) return `HTTP ${reason.status}`;
@@ -460,7 +451,7 @@ export default function Dashboard() {
       setLiveDeals([]);
       setLiveActivities([]);
     } finally {
-      // No loading indicator is shown in the UI.
+      isSyncingRef.current = false;
     }
   };
 

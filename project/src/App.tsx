@@ -5,7 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Contacts from './pages/Contacts';
 import Deals from './pages/Deals';
 import Activities from './pages/Activities';
-import Reports from './pages/Reports';
+import Reports from './pages/Reports.tsx';
 import ApiDocs from './pages/ApiDocs';
 import Settings from './pages/Settings';
 import CrmModuleDetails from './pages/CrmModuleDetails';
