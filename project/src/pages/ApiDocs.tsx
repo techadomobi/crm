@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpenText, Search, ShieldCheck, Code2, ExternalLink, FileText, PlayCircle, ServerCog, Layers3 } from 'lucide-react';
+import { BookOpenText, Search, ShieldCheck, Code2, ExternalLink, FileText, PlayCircle, ServerCog, Layers3, KeyRound, Building2 } from 'lucide-react';
 
 const API_DOCS_URL = 'https://cl.repowire.com/api-docs/';
 
@@ -14,6 +14,42 @@ type Endpoint = {
   category: string;
   params: string[];
   sample: string;
+};
+
+type SwaggerParameter = {
+  name: string;
+  in: 'query' | 'header' | 'path' | 'formData' | 'body';
+  required?: boolean;
+  type?: string;
+  schema?: SwaggerSchema;
+};
+
+type SwaggerSchema = {
+  type?: 'object' | 'array' | 'string' | 'number' | 'integer' | 'boolean';
+  properties?: Record<string, SwaggerSchema>;
+  items?: SwaggerSchema;
+  required?: string[];
+};
+
+type SwaggerOperationMeta = {
+  parameters: SwaggerParameter[];
+  consumes: string[];
+  requiresAuth: boolean;
+  bodySchema?: SwaggerSchema;
+};
+
+type EndpointParamInfo = {
+  name: string;
+  in: SwaggerParameter['in'];
+  required: boolean;
+};
+
+type RunResult = {
+  endpoint: Endpoint;
+  ok: boolean;
+  status: number;
+  skipped?: boolean;
+  error?: string;
 };
 
 // Comprehensive endpoint list derived from live Swagger spec at https://cl.repowire.com/swagger.json
@@ -382,11 +418,33 @@ const methodStyle: Record<Endpoint['method'], string> = {
 
 export default function ApiDocs() {
   const [search, setSearch] = useState('');
+  const [liveEndpoints, setLiveEndpoints] = useState<Endpoint[]>(endpoints);
+  const [swaggerSyncState, setSwaggerSyncState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [isRunningBatch, setIsRunningBatch] = useState(false);
   const [lastRunSummary, setLastRunSummary] = useState<string>('No endpoint run yet.');
+  const [lastRunDetails, setLastRunDetails] = useState<string[]>([]);
+  const [runtimeValues, setRuntimeValues] = useState<Record<string, string>>({
+    partners_Id: localStorage.getItem('repowire_partners_id') ?? '',
+    publisherId: '',
+    advertiserId: '',
+    offerId: '',
+    managerId: '',
+    startDate: '',
+    endDate: '',
+    page: '',
+    limit: '',
+    search: '',
+    email: '',
+    password: '',
+    otp: '',
+    status: '',
+    requestBody: '',
+  });
+  const [sessionTokenInput, setSessionTokenInput] = useState(localStorage.getItem('repowire_token') ?? '');
+  const [sessionPartnersInput, setSessionPartnersInput] = useState(localStorage.getItem('repowire_partners_id') ?? '');
   const isRunningBatchRef = useRef(false);
-  const backgroundCursorRef = useRef(0);
-  const categories = useMemo(() => ['All', ...new Set(endpoints.map((endpoint) => endpoint.category))], []);
+  const operationMetaRef = useRef<Record<string, SwaggerOperationMeta>>({});
+  const categories = useMemo(() => ['All', ...new Set(liveEndpoints.map((endpoint) => endpoint.category))], [liveEndpoints]);
 
   const getCategoryFromHash = () => {
     const hash = window.location.hash.replace('#', '');
@@ -410,7 +468,7 @@ export default function ApiDocs() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [categories]);
 
-  const filtered = endpoints.filter((endpoint) => {
+  const filtered = liveEndpoints.filter((endpoint) => {
     const matchesSearch = [endpoint.title, endpoint.path, endpoint.description, endpoint.category]
       .join(' ')
       .toLowerCase()
@@ -421,147 +479,419 @@ export default function ApiDocs() {
 
   const coverageByCategory = categories
     .filter((category) => category !== 'All')
-    .map((category) => ({ label: category, value: endpoints.filter((endpoint) => endpoint.category === category).length }));
+    .map((category) => ({ label: category, value: liveEndpoints.filter((endpoint) => endpoint.category === category).length }));
 
-  const inferParamValue = (param: string) => {
-    const key = param.toLowerCase();
-    if (key.includes('startdate') || key.includes('enddate') || key === 'date') return '2026-04-09';
-    if (key.includes('email')) return 'demo@example.com';
-    if (key.includes('password')) return 'Test@12345';
-    if (key.includes('otp')) return '123456';
-    if (key.includes('token')) return localStorage.getItem('repowire_token')?.trim() ?? '';
-    if (key.includes('page')) return '1';
-    if (key.includes('limit')) return '10';
-    if (key.includes('search')) return 'test';
-    if (key.includes('url')) return 'https://example.com';
-    if (key.includes('status')) return 'ACTIVE';
-    if (key.endsWith('id') || key.includes('_id') || key.includes('id')) return '1';
-    if (key.includes('revenue') || key.includes('payout') || key.includes('amount')) return '1.0';
-    return '1';
+  const getRuntimeValue = (paramName: string) => {
+    const direct = runtimeValues[paramName];
+    if (direct && direct.trim()) return direct.trim();
+
+    const normalized = paramName.toLowerCase();
+    for (const [key, value] of Object.entries(runtimeValues)) {
+      if (key.toLowerCase() === normalized && value.trim()) return value.trim();
+    }
+
+    return '';
+  };
+
+  const inferParamValueByType = (param: SwaggerParameter) => {
+    const key = param.name.toLowerCase();
+
+    // Never fabricate file payloads.
+    if (param.type === 'file') {
+      return undefined;
+    }
+
+    // Use saved auth token only when available.
+    if (key === 'token' || key === 'authorization') {
+      return localStorage.getItem('repowire_token')?.trim() ?? '';
+    }
+
+    // Use only user-provided runtime values.
+    const runtime = getRuntimeValue(param.name);
+    if (!runtime) return undefined;
+
+    if (param.type === 'boolean') {
+      return runtime.toLowerCase() === 'true';
+    }
+
+    if (param.type === 'number' || param.type === 'integer') {
+      const numeric = Number(runtime);
+      return Number.isFinite(numeric) ? numeric : runtime;
+    }
+
+    return runtime;
+  };
+
+  const parseRuntimeBody = () => {
+    const source = runtimeValues.requestBody.trim();
+    if (!source) return { value: undefined as unknown, error: null as string | null };
+
+    try {
+      return { value: JSON.parse(source), error: null };
+    } catch {
+      return { value: undefined, error: 'requestBody is not valid JSON.' };
+    }
+  };
+
+  const buildBodyFromSchema = (schema?: SwaggerSchema): unknown => {
+    if (!schema) return undefined;
+
+    if (schema.type === 'array') {
+      return undefined;
+    }
+
+    if (schema.type === 'object' || schema.properties) {
+      const output: Record<string, unknown> = {};
+      Object.entries(schema.properties ?? {}).forEach(([key, child]) => {
+        const direct = getRuntimeValue(key);
+        if (direct) {
+          if (child.type === 'boolean') {
+            output[key] = direct.toLowerCase() === 'true';
+            return;
+          }
+          if (child.type === 'number' || child.type === 'integer') {
+            const numeric = Number(direct);
+            output[key] = Number.isFinite(numeric) ? numeric : direct;
+            return;
+          }
+          output[key] = direct;
+          return;
+        }
+
+        const nested = buildBodyFromSchema(child);
+        if (nested !== undefined) {
+          output[key] = nested;
+        }
+      });
+
+      return Object.keys(output).length > 0 ? output : undefined;
+    }
+
+    return undefined;
+  };
+
+  const getMissingInputs = (endpoint: Endpoint) => {
+    const missing: string[] = [];
+    const token = localStorage.getItem('repowire_token')?.trim();
+    const opKey = `${endpoint.method} ${endpoint.path}`;
+    const operationMeta = operationMetaRef.current[opKey];
+    const requiresAuth = operationMeta?.requiresAuth ?? endpoint.auth;
+
+    if (requiresAuth && !token) {
+      missing.push('Authorization token');
+    }
+
+    const paramsFromMeta = operationMeta?.parameters
+      ?? endpoint.params.map((name) => ({
+        name,
+        in: endpoint.method === 'GET' || endpoint.method === 'DELETE' ? 'query' : 'formData' as const,
+      }));
+
+    const bodyParam = paramsFromMeta.find((param) => param.in === 'body');
+    const parsedBody = parseRuntimeBody();
+
+    if (parsedBody.error && bodyParam?.required) {
+      missing.push(parsedBody.error);
+    }
+
+    paramsFromMeta.forEach((param) => {
+      if (!param.required) return;
+
+      if (param.in === 'header' && ['token', 'authorization'].includes(param.name.toLowerCase())) {
+        if (!token) missing.push(param.name);
+        return;
+      }
+
+      if (param.in === 'body') {
+        const fallbackBody = buildBodyFromSchema(operationMeta?.bodySchema ?? param.schema);
+        if (parsedBody.value === undefined && fallbackBody === undefined) {
+          missing.push('requestBody');
+        }
+        return;
+      }
+
+      const value = inferParamValueByType(param);
+      if (value === undefined || value === null || String(value).trim() === '') {
+        missing.push(param.name);
+      }
+    });
+
+    return [...new Set(missing)];
   };
 
   const buildRequest = (endpoint: Endpoint) => {
     const headers: Record<string, string> = {};
     const token = localStorage.getItem('repowire_token')?.trim();
+    const opKey = `${endpoint.method} ${endpoint.path}`;
+    const operationMeta = operationMetaRef.current[opKey];
 
-    if (endpoint.auth && token) {
+    const endpointRequiresAuth = operationMeta?.requiresAuth ?? endpoint.auth;
+    if (endpointRequiresAuth && token) {
       headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
     }
 
+    const queryParams = new URLSearchParams();
+    let resolvedPath = endpoint.path;
+
+    const paramsFromMeta = operationMeta?.parameters
+      ?? endpoint.params.map((name) => ({
+        name,
+        in: endpoint.method === 'GET' || endpoint.method === 'DELETE' ? 'query' : 'formData' as const,
+      }));
+    const formData = new FormData();
+    const bodyParam = paramsFromMeta.find((param) => param.in === 'body');
+    const parsedRuntimeBody = parseRuntimeBody();
+
+    paramsFromMeta.forEach((param) => {
+      const value = inferParamValueByType(param as SwaggerParameter);
+      if (value === undefined || value === null) return;
+
+      if (param.in === 'header') {
+        if (param.name.toLowerCase() === 'token') {
+          const raw = localStorage.getItem('repowire_token')?.trim() ?? '';
+          if (raw) headers[param.name] = raw.startsWith('Bearer ') ? raw : `Bearer ${raw}`;
+        } else {
+          headers[param.name] = typeof value === 'string' ? value : String(value);
+        }
+        return;
+      }
+
+      if (param.in === 'path') {
+        resolvedPath = resolvedPath.replace(`{${param.name}}`, encodeURIComponent(String(value)));
+        resolvedPath = resolvedPath.replace(`:${param.name}`, encodeURIComponent(String(value)));
+        return;
+      }
+
+      if (param.in === 'query') {
+        queryParams.set(param.name, String(value));
+        return;
+      }
+
+      if (param.in === 'formData') {
+        formData.append(param.name, String(value));
+      }
+    });
+
+    const queryText = queryParams.toString();
+    const url = `https://cl.repowire.com${resolvedPath}${queryText ? `?${queryText}` : ''}`;
+
+    const consumes = operationMeta?.consumes ?? [];
+    const usesJsonBody = consumes.includes('application/json') || Boolean(bodyParam);
+
     if (endpoint.method === 'GET' || endpoint.method === 'DELETE') {
-      const queryParams = new URLSearchParams();
-      endpoint.params.forEach((param) => {
-        queryParams.set(param, inferParamValue(param));
-      });
-      const queryText = queryParams.toString();
-      const url = `https://cl.repowire.com${endpoint.path}${queryText ? `?${queryText}` : ''}`;
       return { url, init: { method: endpoint.method, headers } as RequestInit };
     }
 
-    const formData = new FormData();
-    endpoint.params.forEach((param) => {
-      const value = inferParamValue(param);
-      if (value) formData.append(param, value);
-    });
+    if (usesJsonBody) {
+      const schemaBody = buildBodyFromSchema(operationMeta?.bodySchema ?? bodyParam?.schema);
+      const bodyObj = parsedRuntimeBody.value ?? schemaBody ?? {};
+      headers['Content-Type'] = 'application/json';
+      return { url, init: { method: endpoint.method, headers, body: JSON.stringify(bodyObj) } as RequestInit };
+    }
 
-    return {
-      url: `https://cl.repowire.com${endpoint.path}`,
-      init: { method: endpoint.method, headers, body: formData } as RequestInit,
-    };
+    return { url, init: { method: endpoint.method, headers, body: formData } as RequestInit };
   };
 
   const runEndpoint = async (endpoint: Endpoint) => {
+    const missing = getMissingInputs(endpoint);
+    if (missing.length > 0) {
+      return {
+        endpoint,
+        ok: false,
+        status: 0,
+        skipped: true,
+        error: `Missing required values: ${missing.join(', ')}`,
+      } as RunResult;
+    }
+
     const { url, init } = buildRequest(endpoint);
+
     try {
       const response = await fetch(url, init);
-      return { ok: response.ok, status: response.status };
+      if (response.ok) {
+        return { endpoint, ok: true, status: response.status } as RunResult;
+      }
+
+      const text = await response.text();
+      return {
+        endpoint,
+        ok: false,
+        status: response.status,
+        error: text ? text.slice(0, 180) : `HTTP ${response.status}`,
+      } as RunResult;
     } catch {
-      return { ok: false, status: 0 };
+      return {
+        endpoint,
+        ok: false,
+        status: 0,
+        error: 'Network error',
+      } as RunResult;
     }
+  };
+
+  const endpointRequiresAuth = (endpoint: Endpoint) => {
+    const opKey = `${endpoint.method} ${endpoint.path}`;
+    const operationMeta = operationMetaRef.current[opKey];
+    return operationMeta?.requiresAuth ?? endpoint.auth;
+  };
+
+  const getEndpointParamInfo = (endpoint: Endpoint): EndpointParamInfo[] => {
+    const opKey = `${endpoint.method} ${endpoint.path}`;
+    const operationMeta = operationMetaRef.current[opKey];
+
+    if (operationMeta?.parameters?.length) {
+      return operationMeta.parameters.map((param) => ({
+        name: param.name,
+        in: param.in,
+        required: Boolean(param.required),
+      }));
+    }
+
+    const defaultLocation: SwaggerParameter['in'] = endpoint.method === 'GET' || endpoint.method === 'DELETE' ? 'query' : 'formData';
+    return endpoint.params.map((name) => ({
+      name,
+      in: defaultLocation,
+      required: false,
+    }));
   };
 
   const runEndpoints = async (list: Endpoint[]) => {
     if (isRunningBatchRef.current) return;
     isRunningBatchRef.current = true;
     setIsRunningBatch(true);
+    setLastRunDetails([]);
     const startedAt = Date.now();
 
     let success = 0;
     let failed = 0;
+    let skipped = 0;
+    const failures: string[] = [];
 
     const concurrency = 8;
     for (let i = 0; i < list.length; i += concurrency) {
       const slice = list.slice(i, i + concurrency);
       const results = await Promise.all(slice.map((endpoint) => runEndpoint(endpoint)));
       results.forEach((result) => {
-        if (result.ok) success += 1;
-        else failed += 1;
+        if (result.ok) {
+          success += 1;
+          return;
+        }
+
+        if (result.skipped) {
+          skipped += 1;
+        } else {
+          failed += 1;
+        }
+
+        if (failures.length < 10) {
+          const prefix = result.skipped ? 'Skipped' : 'Failed';
+          failures.push(`${prefix}: ${result.endpoint.method} ${result.endpoint.path}${result.error ? ` (${result.error})` : ''}`);
+        }
       });
     }
 
     const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-    setLastRunSummary(`Triggered ${list.length} requests in ${elapsed}s. Success: ${success}, Failed: ${failed}.`);
+    setLastRunSummary(`Processed ${list.length} endpoints in ${elapsed}s. Success: ${success}, Failed: ${failed}, Skipped: ${skipped}.`);
+    setLastRunDetails(failures);
     isRunningBatchRef.current = false;
     setIsRunningBatch(false);
   };
 
   useEffect(() => {
-    // Auto-trigger once per tab session so Network tab always shows live API traffic.
-    const runKey = 'repowire_api_docs_autorun_all';
-    try {
-      if (window.sessionStorage.getItem(runKey) === '1') return;
-      window.sessionStorage.setItem(runKey, '1');
-      setLastRunSummary('Auto-run started for all endpoints. Check Network tab and filter by cl.repowire.com');
-      void runEndpoints(endpoints);
-    } catch {
-      // If sessionStorage is blocked, still try once for current render.
-      void runEndpoints(endpoints);
-    }
+    // Load live swagger metadata to execute each endpoint with correct parameter locations.
+    const loadSwaggerMeta = async () => {
+      try {
+        setSwaggerSyncState('loading');
+        const response = await fetch('https://cl.repowire.com/swagger.json');
+        if (!response.ok) {
+          setSwaggerSyncState('error');
+          return;
+        }
+        const swagger = await response.json() as {
+          consumes?: string[];
+          paths?: Record<string, Record<string, {
+            tags?: string[];
+            summary?: string;
+            description?: string;
+            parameters?: SwaggerParameter[];
+            consumes?: string[];
+            security?: unknown[];
+          }>>;
+        };
+        const next: Record<string, SwaggerOperationMeta> = {};
+        const dynamicEndpoints: Endpoint[] = [];
+
+        Object.entries(swagger.paths ?? {}).forEach(([path, methods]) => {
+          Object.entries(methods ?? {}).forEach(([method, operation]) => {
+            const methodUpper = method.toUpperCase();
+            if (!['GET', 'POST', 'PUT', 'DELETE'].includes(methodUpper)) return;
+            const parameters = operation.parameters ?? [];
+            const bodyParam = parameters.find((param) => param.in === 'body');
+            const requiresAuth = (operation.security?.length ?? 0) > 0
+              || parameters.some((param) => param.in === 'header' && ['token', 'authorization'].includes(param.name.toLowerCase()));
+
+            const category = operation.tags?.[0] ? operation.tags[0].toUpperCase() : 'GENERAL';
+            const title = operation.summary?.trim()
+              || operation.description?.trim()
+              || path.split('/').filter(Boolean).pop()
+              || `${methodUpper} ${path}`;
+            const description = operation.description?.trim() || operation.summary?.trim() || title;
+            const params = parameters.map((param) => param.name);
+            const queryParams = parameters
+              .filter((param) => param.in === 'query')
+              .map((param) => `${param.name}=<${param.name}>`)
+              .join('&');
+            const baseUrl = `https://cl.repowire.com${path}${queryParams ? `?${queryParams}` : ''}`;
+            const authPart = requiresAuth ? ' -H "Authorization: Bearer <token>"' : '';
+            const sample = `curl -X ${methodUpper} ${baseUrl}${authPart}`;
+
+            dynamicEndpoints.push({
+              method: methodUpper as Endpoint['method'],
+              path,
+              title,
+              description,
+              auth: requiresAuth,
+              category,
+              params,
+              sample,
+            });
+
+            next[`${methodUpper} ${path}`] = {
+              parameters,
+              consumes: operation.consumes ?? swagger.consumes ?? [],
+              requiresAuth,
+              bodySchema: bodyParam?.schema,
+            };
+          });
+        });
+
+        operationMetaRef.current = next;
+        if (dynamicEndpoints.length > 0) {
+          dynamicEndpoints.sort((a, b) => `${a.category} ${a.path}`.localeCompare(`${b.category} ${b.path}`));
+          setLiveEndpoints(dynamicEndpoints);
+          setSwaggerSyncState('ready');
+        } else {
+          setSwaggerSyncState('error');
+        }
+      } catch {
+        // Fallback to static endpoint params if swagger metadata load fails.
+        setSwaggerSyncState('error');
+      }
+    };
+
+    void loadSwaggerMeta();
   }, []);
 
   useEffect(() => {
-    // Keep rotating background traffic so all APIs appear over time in Network tab,
-    // even if DevTools is opened after initial page load.
-    if (endpoints.length === 0) return;
-
-    const chunkSize = 24;
-    const runProbe = () => {
-      const total = endpoints.length;
-      const start = backgroundCursorRef.current % total;
-      const probeEndpoints: Endpoint[] = [];
-
-      for (let i = 0; i < Math.min(chunkSize, total); i += 1) {
-        probeEndpoints.push(endpoints[(start + i) % total]);
-      }
-
-      backgroundCursorRef.current = (start + chunkSize) % total;
-      void runEndpoints(probeEndpoints);
-    };
-
-    const intervalId = window.setInterval(runProbe, 8000);
-    const onFocus = () => runProbe();
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') runProbe();
-    };
-
-    runProbe();
-
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisible);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, []);
+    setLastRunSummary('Ready to run endpoint checks. Provide token/runtime values, then run filtered or all endpoints.');
+  }, [liveEndpoints]);
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <section className="rounded-2xl border border-sky-100 bg-gradient-to-r from-cyan-50 to-sky-50 p-5 shadow-sm">
+      <section className="rounded-3xl border border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-sky-50 p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-cyan-700 shadow-sm">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-100 bg-white px-3 py-1 text-xs font-semibold text-cyan-700 shadow-sm">
               <BookOpenText size={14} />
               Repowire API Docs
             </div>
@@ -582,11 +912,89 @@ export default function ApiDocs() {
           </a>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-2xl border border-cyan-100 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Portal-style API Session</p>
+            <p className="mt-1 text-sm text-slate-600">Inspired by the Pixara portal login UX: keep auth/session context explicit before running APIs.</p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="relative">
+                <KeyRound size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={sessionTokenInput}
+                  onChange={(event) => setSessionTokenInput(event.target.value)}
+                  placeholder="Bearer token"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 py-2 text-xs text-slate-700"
+                />
+              </div>
+              <div className="relative">
+                <Building2 size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={sessionPartnersInput}
+                  onChange={(event) => setSessionPartnersInput(event.target.value)}
+                  placeholder="partners_Id"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 py-2 text-xs text-slate-700"
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => {
+                  const cleanedToken = sessionTokenInput.trim().replace(/^Bearer\s+/i, '');
+                  const cleanedPartner = sessionPartnersInput.trim();
+                  if (cleanedToken) localStorage.setItem('repowire_token', cleanedToken);
+                  if (cleanedPartner) localStorage.setItem('repowire_partners_id', cleanedPartner);
+                  setRuntimeValues((prev) => ({
+                    ...prev,
+                    partners_Id: cleanedPartner || prev.partners_Id,
+                  }));
+                  setLastRunSummary('Session context saved. You can now run authenticated endpoints.');
+                }}
+                className="rounded-lg bg-cyan-700 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-800"
+              >
+                Save Session
+              </button>
+              <button
+                onClick={() => {
+                  setSessionTokenInput(localStorage.getItem('repowire_token') ?? '');
+                  setSessionPartnersInput(localStorage.getItem('repowire_partners_id') ?? '');
+                  setRuntimeValues((prev) => ({
+                    ...prev,
+                    partners_Id: localStorage.getItem('repowire_partners_id') ?? prev.partners_Id,
+                  }));
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Reload Stored Session
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-cyan-100 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick status</p>
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">Token</span>
+                <span className="font-semibold text-slate-800">{localStorage.getItem('repowire_token')?.trim() ? 'Configured' : 'Missing'}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">partners_Id</span>
+                <span className="font-semibold text-slate-800">{localStorage.getItem('repowire_partners_id')?.trim() || 'Not set'}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">Swagger Sync</span>
+                <span className="font-semibold text-slate-800">{swaggerSyncState}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
             { icon: <ShieldCheck size={15} />, title: 'Bearer auth', text: 'Most routes require a JWT token in Authorization header.' },
             { icon: <Code2 size={15} />, title: 'Real endpoints', text: 'Paths below are pulled from the Swagger spec and the app client.' },
             { icon: <ServerCog size={15} />, title: 'Backend ready', text: 'Use these routes with the live API workspace in Settings.' },
+            { icon: <Layers3 size={15} />, title: 'Total operations', text: `${liveEndpoints.length} APIs synced from live Swagger.` },
+            { icon: <FileText size={15} />, title: 'Swagger sync', text: swaggerSyncState === 'ready' ? 'Live schema loaded from swagger.json' : swaggerSyncState === 'loading' ? 'Syncing from live schema...' : 'Live sync failed, showing local snapshot.' },
           ].map((item) => (
             <div key={item.title} className="rounded-2xl border border-white/70 bg-white/80 p-4 backdrop-blur">
               <div className="mb-2 inline-flex rounded-lg bg-cyan-50 p-2 text-cyan-700">{item.icon}</div>
@@ -606,15 +1014,50 @@ export default function ApiDocs() {
               {isRunningBatch ? 'Running...' : `Run Filtered (${filtered.length})`}
             </button>
             <button
-              onClick={() => runEndpoints(endpoints)}
+              onClick={() => runEndpoints(liveEndpoints)}
               disabled={isRunningBatch}
               className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800 hover:bg-cyan-100 disabled:opacity-60"
             >
-              {isRunningBatch ? 'Running...' : `Run All (${endpoints.length})`}
+              {isRunningBatch ? 'Running...' : `Run All (${liveEndpoints.length})`}
             </button>
           </div>
           <p className="mt-2 text-xs text-slate-600">{lastRunSummary}</p>
-          <p className="mt-1 text-[11px] text-slate-500">These requests are fired intentionally so they appear in Browser Network tab. Some endpoints may return 4xx/5xx without full business inputs.</p>
+          <p className="mt-1 text-[11px] text-slate-500">Requests run only on demand and skip endpoints missing required values.</p>
+          {lastRunDetails.length > 0 && (
+            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Diagnostics</p>
+              <ul className="mt-1 space-y-1 text-[11px] text-slate-600">
+                {lastRunDetails.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 rounded-2xl border border-white/70 bg-white/80 p-4 backdrop-blur">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">Runtime Values (optional)</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {Object.keys(runtimeValues).filter((key) => key !== 'requestBody').map((key) => (
+              <input
+                key={key}
+                value={runtimeValues[key]}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setRuntimeValues((prev) => ({ ...prev, [key]: nextValue }));
+                }}
+                placeholder={key}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+              />
+            ))}
+          </div>
+          <textarea
+            value={runtimeValues.requestBody}
+            onChange={(event) => setRuntimeValues((prev) => ({ ...prev, requestBody: event.target.value }))}
+            placeholder='requestBody (JSON), e.g. {"offerId":"123"}'
+            rows={4}
+            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-700"
+          />
         </div>
       </section>
 
@@ -674,8 +1117,11 @@ export default function ApiDocs() {
       </section>
 
       <section id="api-docs-results" className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {filtered.map((endpoint) => (
-          <article key={`${endpoint.method}:${endpoint.path}`} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm hover:shadow-lg transition-all">
+        {filtered.map((endpoint) => {
+          const paramInfo = getEndpointParamInfo(endpoint);
+
+          return (
+            <article key={`${endpoint.method}:${endpoint.path}`} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm hover:shadow-lg transition-all">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -695,11 +1141,25 @@ export default function ApiDocs() {
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[0.9fr_1.1fr]">
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Auth</p>
-                <p className="mt-1 text-sm font-medium text-slate-800">{endpoint.auth ? 'Bearer token required' : 'Public endpoint'}</p>
+                <p className="mt-1 text-sm font-medium text-slate-800">{endpointRequiresAuth(endpoint) ? 'Bearer/token header required' : 'Public endpoint'}</p>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Parameters</p>
-                <p className="mt-1 text-sm font-medium text-slate-800">{endpoint.params.length ? endpoint.params.join(', ') : 'None listed in spec'}</p>
+                {paramInfo.length ? (
+                  <div className="mt-2 space-y-1.5">
+                    {paramInfo.map((param) => (
+                      <div key={`${endpoint.path}-${param.in}-${param.name}`} className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <span className="rounded-md bg-slate-200/80 px-2 py-0.5 font-mono text-slate-700">{param.name}</span>
+                        <span className="rounded-md bg-cyan-100 px-1.5 py-0.5 font-semibold uppercase text-cyan-800">{param.in}</span>
+                        <span className={`rounded-md px-1.5 py-0.5 font-semibold ${param.required ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {param.required ? 'required' : 'optional'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm font-medium text-slate-800">None listed in spec</p>
+                )}
               </div>
             </div>
 
@@ -718,7 +1178,8 @@ export default function ApiDocs() {
               <pre className="overflow-x-auto whitespace-pre-wrap text-[11px] leading-relaxed text-cyan-100">{endpoint.sample}</pre>
             </div>
           </article>
-        ))}
+          );
+        })}
       </section>
 
       <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">

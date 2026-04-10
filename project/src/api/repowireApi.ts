@@ -5,6 +5,19 @@ export type AdminLoginPayload = {
   password: string;
 } & Record<string, unknown>;
 
+export type SignupPayload = {
+  partners_Id?: string;
+  email: string;
+  password: string;
+  confirm_password?: string;
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
+  mobileNumber?: string;
+  address?: string;
+  name?: string;
+} & Record<string, unknown>;
+
 export type ListQuery = {
   page?: number;
   limit?: number;
@@ -34,6 +47,34 @@ export type CreateOfferPayload = Record<string, unknown>;
 export const repowireApi = {
   adminLogin: (payload: AdminLoginPayload) =>
     apiRequest('/admin/login', {
+      method: 'POST',
+      body: payload,
+      asFormData: true,
+    }),
+
+  subAdminLogin: (payload: AdminLoginPayload) =>
+    apiRequest('/subAdmin/login', {
+      method: 'POST',
+      body: payload,
+      asFormData: true,
+    }),
+
+  publicherLogin: (payload: AdminLoginPayload) =>
+    apiRequest('/publicher/login', {
+      method: 'POST',
+      body: payload,
+      asFormData: true,
+    }),
+
+  subAdminSignup: (payload: SignupPayload) =>
+    apiRequest('/subAdmin/signup', {
+      method: 'POST',
+      body: payload,
+      asFormData: true,
+    }),
+
+  publicherSignup: (payload: SignupPayload) =>
+    apiRequest('/publicher/signup', {
       method: 'POST',
       body: payload,
       asFormData: true,

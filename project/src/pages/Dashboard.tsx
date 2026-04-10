@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { DollarSign, Users, TrendingUp, Target, Phone, Mail, Calendar, CheckCircle, Clock, AlertCircle, ShieldAlert, Flag, Layers, ArrowUpRight } from 'lucide-react';
 import StatsCard from '../components/StatsCard';
 import RevenueChart from '../components/RevenueChart';
-import { deals, activities, pipelineStages, teamPerformance } from '../data/mockData';
+import { pipelineStages, teamPerformance } from '../data/mockData';
 import { repowireApi } from '../api/repowireApi';
 import { ApiError } from '../api/httpClient';
+import { fetchLiveActivities, fetchLiveDeals } from '../api/liveDataAdapters';
+import { Activity, Deal } from '../types';
 
 const stageColors: Record<string, string> = {
   lead: 'bg-slate-200 text-slate-600',
@@ -197,15 +199,19 @@ export default function Dashboard() {
   });
   const [chartPoints, setChartPoints] = useState(buildFallbackRevenueSeries());
   const [livePipelineRows, setLivePipelineRows] = useState(pipelineStages);
+  const [liveDeals, setLiveDeals] = useState<Deal[]>([]);
+  const [liveActivities, setLiveActivities] = useState<Activity[]>([]);
 
-  const recentDeals = showAllDeals ? deals : deals.slice(0, 5);
-  const recentActivities = showAllActivities ? activities : activities.slice(0, 5);
+  const recentDeals = showAllDeals ? liveDeals : liveDeals.slice(0, 5);
+  const recentActivities = showAllActivities ? liveActivities : liveActivities.slice(0, 5);
   const pipelineTotal = pipelineStages.reduce((sum, stage) => sum + stage.value, 0);
-  const weightedForecast = deals
+  const weightedForecast = liveDeals
     .filter((deal) => !['closed_won', 'closed_lost'].includes(deal.stage))
     .reduce((sum, deal) => sum + (deal.value * deal.probability) / 100, 0);
-  const overdueActivities = activities.filter((activity) => activity.status === 'overdue').length;
-  const completionRate = Math.round((activities.filter((activity) => activity.status === 'completed').length / activities.length) * 100);
+  const overdueActivities = liveActivities.filter((activity) => activity.status === 'overdue').length;
+  const completionRate = liveActivities.length
+    ? Math.round((liveActivities.filter((activity) => activity.status === 'completed').length / liveActivities.length) * 100)
+    : 0;
   const fallbackPublishers = 128;
   const fallbackAdvertisers = 64;
   const fallbackConversions = 512;
@@ -221,22 +227,7 @@ export default function Dashboard() {
   ];
 
   const loadLiveKpis = async () => {
-    const token = localStorage.getItem('repowire_token')?.trim();
-
-    if (!token) {
-      setKpiValues((current) => ({
-        ...current,
-        revenue: 1_360_000,
-        conversions: fallbackConversions,
-        publishers: fallbackPublishers,
-        advertisers: fallbackAdvertisers,
-        source: 'mock',
-      }));
-      setLiveError(null);
-      setChartPoints(buildFallbackRevenueSeries());
-      setLivePipelineRows(pipelineStages);
-      return;
-    }
+    const partnersId = localStorage.getItem('repowire_partners_id')?.trim();
 
     setLiveError(null);
 
@@ -246,18 +237,23 @@ export default function Dashboard() {
       startDate.setDate(startDate.getDate() - 6);
       const dateRange = { startDate: toDateKey(startDate), endDate: toDateKey(endDate) };
 
-      const [summary, publishers, advertisers] = await Promise.all([
+      const [summary, publishers, advertisers, dealsResponse, activitiesResponse] = await Promise.all([
         repowireApi.conversionSummary(),
-        repowireApi.publisherList({ page: 1, limit: 1 }),
-        repowireApi.advertiserList({ page: 1, limit: 1 }),
+        repowireApi.publisherList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
+        repowireApi.advertiserList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
+        fetchLiveDeals(),
+        fetchLiveActivities(),
       ]);
+
+      setLiveDeals(dealsResponse);
+      setLiveActivities(activitiesResponse);
 
       let conversionList: unknown = [];
       let dateBasedConversions: unknown = [];
 
       try {
         [conversionList, dateBasedConversions] = await Promise.all([
-          repowireApi.conversionList({ page: 1, ...dateRange }),
+          repowireApi.conversionList({ page: 1, ...dateRange, partners_Id: partnersId || undefined }),
           repowireApi.conversionAccordingToDate({ startDate: dateRange.startDate }),
         ]);
       } catch {
@@ -339,17 +335,15 @@ export default function Dashboard() {
       });
       setChartPoints(buildFallbackRevenueSeries());
       setLivePipelineRows(pipelineStages);
+      setLiveDeals([]);
+      setLiveActivities([]);
     } finally {
       // No loading indicator is shown in the UI.
     }
   };
 
   useEffect(() => {
-    if (localStorage.getItem('repowire_token')?.trim()) {
-      loadLiveKpis();
-    } else {
-      setLiveError(null);
-    }
+    loadLiveKpis();
   }, []);
 
   const kpiCards = useMemo(
@@ -493,6 +487,9 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="divide-y divide-slate-50">
+            {recentDeals.length === 0 && (
+              <div className="px-5 py-8 text-center text-sm text-slate-500">No live deals loaded.</div>
+            )}
             {recentDeals.map((deal) => (
               <div key={deal.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors cursor-pointer">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 flex items-center justify-center text-slate-600 text-xs font-bold flex-shrink-0">
@@ -530,6 +527,9 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="divide-y divide-slate-50">
+            {recentActivities.length === 0 && (
+              <div className="px-5 py-8 text-center text-sm text-slate-500">No live activities loaded.</div>
+            )}
             {recentActivities.map((activity) => (
               <div key={activity.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors cursor-pointer">
                 <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${

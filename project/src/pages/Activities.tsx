@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Phone, Mail, Calendar, FileText, CheckSquare, CheckCircle, Clock, AlertCircle, Filter } from 'lucide-react';
-import { activities } from '../data/mockData';
 import { Activity } from '../types';
+import { fetchLiveActivities, hasAuthToken } from '../api/liveDataAdapters';
 
 const typeConfig: Record<Activity['type'], { icon: React.ReactNode; label: string; color: string; bg: string }> = {
   call: { icon: <Phone size={14} />, label: 'Call', color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -18,10 +18,36 @@ const statusConfig: Record<Activity['status'], { icon: React.ReactNode; label: s
 };
 
 export default function Activities() {
-  const [activityList, setActivityList] = useState(activities);
+  const [activityList, setActivityList] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | Activity['type']>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | Activity['status']>('all');
   const [notice, setNotice] = useState<string | null>(null);
+
+  const loadActivities = useCallback(async () => {
+    if (!hasAuthToken()) {
+      setActivityList([]);
+      setLoadError('Save a valid bearer token and login to load live activities.');
+      return;
+    }
+
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const rows = await fetchLiveActivities();
+      setActivityList(rows);
+    } catch {
+      setLoadError('Failed to load live activity feeds from Repowire API.');
+      setActivityList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadActivities();
+  }, [loadActivities]);
 
   const filtered = activityList.filter(a => {
     return (typeFilter === 'all' || a.type === typeFilter) &&
@@ -57,6 +83,12 @@ export default function Activities() {
         <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm text-cyan-900 flex items-center justify-between">
           <span>{notice}</span>
           <button onClick={() => setNotice(null)} className="text-xs font-semibold text-cyan-700 hover:text-cyan-900">Dismiss</button>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+          {loadError}
         </div>
       )}
 
@@ -102,29 +134,22 @@ export default function Activities() {
           </div>
           <button
             onClick={() => {
-              setActivityList((current) => [
-                {
-                  id: `new-${Date.now()}`,
-                  type: 'task',
-                  title: 'New follow-up task created',
-                  contact: 'New Prospect',
-                  company: 'Pilot Account',
-                  date: new Date().toISOString(),
-                  status: 'pending',
-                  assignee: 'Alex R.',
-                  notes: 'Auto-created from activity logger',
-                },
-                ...current,
-              ]);
-              setNotice('Activity logged successfully.');
+              void loadActivities();
+              setNotice('Refreshing live activities...');
             }}
-            className="ml-auto flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-2 rounded-xl transition-all active:scale-95"
+            disabled={loading}
+            className="ml-auto flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-2 rounded-xl transition-all active:scale-95 disabled:opacity-60"
           >
-            <Plus size={14} /> Log Activity
+            <Plus size={14} /> {loading ? 'Refreshing...' : 'Refresh Live'}
           </button>
         </div>
 
         <div className="divide-y divide-slate-50">
+          {filtered.length === 0 && (
+            <div className="px-5 py-8 text-center text-sm text-slate-500">
+              {loading ? 'Loading live activities...' : 'No live activities found for current filters.'}
+            </div>
+          )}
           {filtered.map((activity, idx) => {
             const tc = typeConfig[activity.type];
             const sc = statusConfig[activity.status];
@@ -175,7 +200,7 @@ export default function Activities() {
           </div>
           <div className="divide-y divide-slate-50">
             {ownerSummary.map(([owner, data]) => {
-              const pct = Math.round((data.done / data.total) * 100);
+              const pct = data.total ? Math.round((data.done / data.total) * 100) : 0;
               return (
                 <div key={owner} className="px-5 py-4 hover:bg-slate-50 transition-colors">
                   <div className="flex items-center justify-between mb-1.5">

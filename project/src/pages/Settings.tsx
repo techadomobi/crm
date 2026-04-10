@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { User, Bell, Shield, CreditCard, Users, Globe, Mail, Phone, ChevronRight } from 'lucide-react';
 import BackendApiPanel from '../components/BackendApiPanel';
+import { repowireApi } from '../api/repowireApi';
+import { ApiError } from '../api/httpClient';
 
 const sections = [
   {
@@ -32,6 +34,43 @@ const integrations = [
 
 export default function Settings() {
   const [notice, setNotice] = useState<string | null>(null);
+  const [authSource, setAuthSource] = useState<string>('unknown');
+  const [authMode, setAuthMode] = useState<string>('unknown');
+  const [tokenPreview, setTokenPreview] = useState<string>('missing');
+  const [tokenValidation, setTokenValidation] = useState<string>('Not validated yet.');
+  const [isValidatingToken, setIsValidatingToken] = useState(false);
+
+  useEffect(() => {
+    const source = localStorage.getItem('repowire_auth_source') ?? 'unknown';
+    const mode = localStorage.getItem('repowire_last_auth_mode') ?? 'unknown';
+    const token = localStorage.getItem('repowire_token')?.trim() ?? '';
+
+    setAuthSource(source);
+    setAuthMode(mode);
+    setTokenPreview(token ? `${token.slice(0, 14)}...${token.slice(-8)}` : 'missing');
+  }, []);
+
+  const validateToken = async () => {
+    const token = localStorage.getItem('repowire_token')?.trim();
+    if (!token) {
+      setTokenValidation('No token found in localStorage.');
+      return;
+    }
+
+    setIsValidatingToken(true);
+    try {
+      await repowireApi.conversionSummary();
+      setTokenValidation('Valid: authenticated requests are working (checked via /conversion/* endpoints).');
+    } catch (error) {
+      if (error instanceof ApiError) {
+        setTokenValidation(`Invalid or unauthorized token (HTTP ${error.status}).`);
+      } else {
+        setTokenValidation('Validation failed due to network/server error.');
+      }
+    } finally {
+      setIsValidatingToken(false);
+    }
+  };
 
   return (
     <div className="space-y-5 animate-fade-in max-w-4xl">
@@ -43,6 +82,43 @@ export default function Settings() {
       )}
 
       <BackendApiPanel />
+
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="text-slate-900 font-semibold text-sm flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center"><Shield size={14} /></div>
+            Auth Debug
+          </h3>
+          <p className="text-slate-400 text-xs mt-0.5">Live authentication diagnostics for this session</p>
+        </div>
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+            <p className="text-xs text-slate-500">Auth endpoint</p>
+            <p className="text-sm font-semibold text-slate-800 mt-0.5">{authSource}</p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+            <p className="text-xs text-slate-500">Auth mode</p>
+            <p className="text-sm font-semibold text-slate-800 mt-0.5">{authMode}</p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 sm:col-span-2">
+            <p className="text-xs text-slate-500">Token preview</p>
+            <p className="text-sm font-semibold text-slate-800 mt-0.5 break-all">{tokenPreview}</p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 sm:col-span-2">
+            <p className="text-xs text-slate-500">Validation</p>
+            <p className="text-sm font-semibold text-slate-800 mt-0.5">{tokenValidation}</p>
+          </div>
+        </div>
+        <div className="px-5 pb-5">
+          <button
+            onClick={() => void validateToken()}
+            disabled={isValidatingToken}
+            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-60"
+          >
+            {isValidatingToken ? 'Validating...' : 'Validate Token'}
+          </button>
+        </div>
+      </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
         <div className="px-5 py-4 border-b border-slate-100">
@@ -141,7 +217,7 @@ export default function Settings() {
                 <p className="text-slate-900 text-sm font-medium">{n.label}</p>
                 <p className="text-slate-400 text-xs">{n.sub}</p>
               </div>
-              <div className="flex items-center gap-4 hidden sm:flex">
+              <div className="hidden items-center gap-4 sm:flex">
                 <div className="flex items-center gap-1.5">
                   <Mail size={11} className="text-slate-400" />
                   <label className="relative inline-flex items-center cursor-pointer">

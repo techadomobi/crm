@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Search, Filter, Plus, Phone, Mail, MoreHorizontal, ChevronUp, ChevronDown } from 'lucide-react';
-import { contacts } from '../data/mockData';
+import { fetchLiveContacts, hasAuthToken } from '../api/liveDataAdapters';
+import { Contact } from '../types';
 
 const statusStyles = {
   active: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
@@ -9,13 +10,39 @@ const statusStyles = {
 };
 
 export default function Contacts() {
-  const [contactList, setContactList] = useState(contacts);
+  const [contactList, setContactList] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'prospect'>('all');
   const [sortField, setSortField] = useState<'name' | 'value' | 'lastContact'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const loadContacts = useCallback(async () => {
+    if (!hasAuthToken()) {
+      setContactList([]);
+      setLoadError('Save a valid bearer token and login to load live contacts.');
+      return;
+    }
+
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const rows = await fetchLiveContacts();
+      setContactList(rows);
+    } catch {
+      setLoadError('Failed to load live contacts from Repowire API.');
+      setContactList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadContacts();
+  }, [loadContacts]);
 
   const pageSize = 6;
 
@@ -85,6 +112,12 @@ export default function Contacts() {
         </div>
       )}
 
+      {loadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+          {loadError}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: 'Total Contacts', value: contactList.length, color: 'text-slate-900' },
@@ -132,30 +165,13 @@ export default function Contacts() {
           </div>
           <button
             onClick={() => {
-              const now = new Date();
-              const month = String(now.getMonth() + 1).padStart(2, '0');
-              const day = String(now.getDate()).padStart(2, '0');
-              setContactList((current) => [
-                {
-                  id: `new-${Date.now()}`,
-                  name: 'New Prospect',
-                  email: 'new.prospect@example.com',
-                  phone: '+1 555 0199',
-                  company: 'New Company',
-                  status: 'prospect',
-                  value: 15000,
-                  lastContact: `${now.getFullYear()}-${month}-${day}`,
-                  avatar: 'NP',
-                  tags: ['new'],
-                },
-                ...current,
-              ]);
-              setNotice('Added a new contact to the top of the list.');
-              setCurrentPage(1);
+              void loadContacts();
+              setNotice('Refreshing live contacts...');
             }}
-            className="ml-auto flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-2 rounded-xl transition-all active:scale-95 shadow-sm"
+            disabled={loading}
+            className="ml-auto flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-2 rounded-xl transition-all active:scale-95 shadow-sm disabled:opacity-60"
           >
-            <Plus size={14} /> Add Contact
+            <Plus size={14} /> {loading ? 'Refreshing...' : 'Refresh Live'}
           </button>
         </div>
 
@@ -185,6 +201,13 @@ export default function Contacts() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
+              {pagedContacts.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-8 text-center text-sm text-slate-500">
+                    {loading ? 'Loading live contacts...' : 'No live contacts found for current filter.'}
+                  </td>
+                </tr>
+              )}
               {pagedContacts.map((contact, idx) => (
                 <tr
                   key={contact.id}

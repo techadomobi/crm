@@ -6,10 +6,12 @@ type AuthMode = 'login' | 'register';
 interface AuthPortalProps {
   mode: AuthMode;
   onModeChange: (mode: AuthMode) => void;
-  onAuthenticate: () => void;
+  onAuthenticate: (payload: { mode: AuthMode; email: string; password: string; name?: string }) => Promise<void>;
+  authError?: string | null;
+  isSubmitting?: boolean;
 }
 
-export default function AuthPortal({ mode, onModeChange, onAuthenticate }: AuthPortalProps) {
+export default function AuthPortal({ mode, onModeChange, onAuthenticate, authError = null, isSubmitting = false }: AuthPortalProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -91,9 +93,14 @@ export default function AuthPortal({ mode, onModeChange, onAuthenticate }: AuthP
             </div>
 
             <form
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                onAuthenticate();
+                await onAuthenticate({
+                  mode,
+                  email: email.trim(),
+                  password,
+                  name: name.trim() || undefined,
+                });
               }}
               className="space-y-4"
             >
@@ -146,11 +153,18 @@ export default function AuthPortal({ mode, onModeChange, onAuthenticate }: AuthP
 
               <button
                 type="submit"
+                disabled={isSubmitting}
                 className="group mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-sky-700 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-cyan-900/20 transition-all hover:translate-y-[-1px] hover:shadow-cyan-900/30"
               >
-                {submitLabel}
+                {isSubmitting ? 'Authenticating...' : submitLabel}
                 <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
               </button>
+
+              {authError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {authError}
+                </div>
+              )}
             </form>
 
             <p className="mt-4 text-center text-xs text-slate-500">

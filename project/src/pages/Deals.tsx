@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, TrendingUp, DollarSign, Target, Award, MoreHorizontal, Calendar } from 'lucide-react';
-import { deals } from '../data/mockData';
 import { Deal } from '../types';
+import { fetchLiveDeals, hasAuthToken } from '../api/liveDataAdapters';
 
 type Stage = Deal['stage'];
 
@@ -53,14 +53,41 @@ function DealCard({ deal, onAction }: { deal: Deal; onAction: (message: string) 
 }
 
 export default function Deals() {
-  const [dealItems, setDealItems] = useState(deals);
+  const [dealItems, setDealItems] = useState<Deal[]>([]);
   const [view, setView] = useState<'kanban' | 'list'>('kanban');
   const [notice, setNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadDeals = useCallback(async () => {
+    if (!hasAuthToken()) {
+      setDealItems([]);
+      setLoadError('Save a valid bearer token and login to load live deals.');
+      return;
+    }
+
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const rows = await fetchLiveDeals();
+      setDealItems(rows);
+    } catch {
+      setLoadError('Failed to load live deal data from Repowire API.');
+      setDealItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDeals();
+  }, [loadDeals]);
 
   const totalOpen = dealItems.filter(d => !['closed_won', 'closed_lost'].includes(d.stage)).reduce((s, d) => s + d.value, 0);
   const totalWon = dealItems.filter(d => d.stage === 'closed_won').reduce((s, d) => s + d.value, 0);
-  const avgDeal = Math.round(dealItems.reduce((s, d) => s + d.value, 0) / dealItems.length);
-  const winRate = Math.round((dealItems.filter(d => d.stage === 'closed_won').length / dealItems.filter(d => ['closed_won', 'closed_lost'].includes(d.stage)).length) * 100);
+  const avgDeal = dealItems.length ? Math.round(dealItems.reduce((s, d) => s + d.value, 0) / dealItems.length) : 0;
+  const closedDealsCount = dealItems.filter(d => ['closed_won', 'closed_lost'].includes(d.stage)).length;
+  const winRate = closedDealsCount ? Math.round((dealItems.filter(d => d.stage === 'closed_won').length / closedDealsCount) * 100) : 0;
   const weightedPipeline = dealItems
     .filter((deal) => !['closed_won', 'closed_lost'].includes(deal.stage))
     .reduce((sum, deal) => sum + (deal.value * deal.probability) / 100, 0);
@@ -77,6 +104,12 @@ export default function Deals() {
         <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm text-cyan-900 flex items-center justify-between">
           <span>{notice}</span>
           <button onClick={() => setNotice(null)} className="text-xs font-semibold text-cyan-700 hover:text-cyan-900">Dismiss</button>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+          {loadError}
         </div>
       )}
 
@@ -113,26 +146,13 @@ export default function Deals() {
         </div>
         <button
           onClick={() => {
-            setDealItems((current) => [
-              {
-                id: `new-${Date.now()}`,
-                title: 'New Opportunity Intake',
-                contact: 'New Prospect',
-                company: 'Pilot Account',
-                value: 26000,
-                stage: 'lead',
-                probability: 20,
-                closeDate: '2026-05-31',
-                assignee: 'Alex R.',
-                createdAt: '2026-04-09',
-              },
-              ...current,
-            ]);
-            setNotice('New deal created in Lead stage.');
+            void loadDeals();
+            setNotice('Refreshing live deals...');
           }}
-          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-2 rounded-xl transition-all active:scale-95 shadow-sm"
+          disabled={loading}
+          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-2 rounded-xl transition-all active:scale-95 shadow-sm disabled:opacity-60"
         >
-          <Plus size={14} /> New Deal
+          <Plus size={14} /> {loading ? 'Refreshing...' : 'Refresh Live'}
         </button>
       </div>
 
@@ -149,6 +169,11 @@ export default function Deals() {
                   <span className="text-xs text-slate-400 bg-white/70 px-1.5 py-0.5 rounded-full">{stageDeals.length}</span>
                 </div>
                 <div className="space-y-2">
+                  {stageDeals.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-center text-xs text-slate-500">
+                      No live deals in this stage.
+                    </div>
+                  )}
                   {stageDeals.map(deal => <DealCard key={deal.id} deal={deal} onAction={setNotice} />)}
                 </div>
                 {stageTotal > 0 && (
@@ -174,6 +199,13 @@ export default function Deals() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
+              {dealItems.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-8 text-center text-sm text-slate-500">
+                    {loading ? 'Loading live deals...' : 'No live deals available.'}
+                  </td>
+                </tr>
+              )}
               {dealItems.map(deal => {
                 const stage = stageConfig.find(s => s.id === deal.stage)!;
                 return (
