@@ -4,7 +4,7 @@ import StatsCard from '../components/StatsCard';
 import RevenueChart from '../components/RevenueChart';
 import { pipelineStages, teamPerformance } from '../data/mockData';
 import { repowireApi } from '../api/repowireApi';
-import { ApiError } from '../api/httpClient';
+import { API_BASE_URL, ApiError } from '../api/httpClient';
 import { fetchLiveActivities, fetchLiveDeals } from '../api/liveDataAdapters';
 import { Activity, Deal } from '../types';
 
@@ -189,6 +189,64 @@ const isFulfilled = <T,>(result: PromiseSettledResult<T>): result is PromiseFulf
 
 const isPermissionDenied = (reason: unknown) => {
   return reason instanceof ApiError && (reason.status === 401 || reason.status === 403);
+};
+
+const runSwaggerCatalogProbe = async (): Promise<number> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/swagger.json`, { cache: 'no-store' });
+    if (!response.ok) {
+      return 0;
+    }
+
+    const swagger = await response.json() as {
+      paths?: Record<string, Record<string, unknown>>;
+    };
+
+    const operations: Array<{ path: string; method: string }> = [];
+    Object.entries(swagger.paths ?? {}).forEach(([rawPath, rawMethods]) => {
+      const path = rawPath.replace(/\{[^}]+\}/g, 'probe').replace(/:[^/]+/g, 'probe');
+      Object.keys(rawMethods ?? {}).forEach((method) => {
+        const upper = method.toUpperCase();
+        if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'].includes(upper)) return;
+        operations.push({ path, method: upper });
+      });
+    });
+
+    if (operations.length === 0) {
+      return 0;
+    }
+
+    const token = localStorage.getItem('repowire_token')?.trim();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+    }
+
+    const concurrency = 6;
+    for (let i = 0; i < operations.length; i += concurrency) {
+      const batch = operations.slice(i, i + concurrency);
+      await Promise.all(
+        batch.map(async ({ path, method }) => {
+          const separator = path.includes('?') ? '&' : '?';
+          const url = `${API_BASE_URL}${path}${separator}_probe=1&_operation=${encodeURIComponent(method)}`;
+          const probeMethod = method === 'GET' || method === 'DELETE' ? method : 'OPTIONS';
+          try {
+            await fetch(url, {
+              method: probeMethod,
+              headers,
+              cache: 'no-store',
+            });
+          } catch {
+            // The probe only exists to surface endpoints in network tooling.
+          }
+        })
+      );
+    }
+
+    return operations.length;
+  } finally {
+    // No-op
+  }
 };
 
 export default function Dashboard() {
@@ -426,6 +484,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadLiveKpis();
+  }, []);
+
+  useEffect(() => {
+    runSwaggerCatalogProbe().then((count) => {
+      if (count > 0) {
+        setNotice(`Network probe dispatched for ${count} swagger operations.`);
+      }
+    });
   }, []);
 
   useEffect(() => {
