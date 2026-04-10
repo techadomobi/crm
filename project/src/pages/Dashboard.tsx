@@ -221,6 +221,7 @@ export default function Dashboard() {
   const [liveDeals, setLiveDeals] = useState<Deal[]>([]);
   const [liveActivities, setLiveActivities] = useState<Activity[]>([]);
   const forbiddenEndpointsRef = useRef<Set<string>>(readForbiddenEndpoints());
+  const lastAutoSyncAtRef = useRef(0);
 
   const persistForbiddenEndpoints = () => {
     localStorage.setItem(
@@ -467,8 +468,38 @@ export default function Dashboard() {
     loadLiveKpis();
   }, []);
 
-  // Keep dashboard refresh explicit (initial load + Sync button)
-  // to avoid repeating forbidden endpoint calls in network logs.
+  useEffect(() => {
+    const triggerAutoSync = () => {
+      const now = Date.now();
+      // Throttle auto-sync triggers from focus/visibility changes.
+      if (now - lastAutoSyncAtRef.current < 15_000) return;
+      lastAutoSyncAtRef.current = now;
+      loadLiveKpis();
+    };
+
+    const onWindowFocus = () => {
+      triggerAutoSync();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerAutoSync();
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      triggerAutoSync();
+    }, 30_000);
+
+    window.addEventListener('focus', onWindowFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onWindowFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 
   const kpiCards = useMemo(
     () => [
