@@ -191,19 +191,6 @@ const isPermissionDenied = (reason: unknown) => {
   return reason instanceof ApiError && (reason.status === 401 || reason.status === 403);
 };
 
-const DASHBOARD_FORBIDDEN_STORAGE_KEY = 'repowire_dashboard_forbidden_endpoints';
-
-const readForbiddenEndpoints = () => {
-  try {
-    const raw = localStorage.getItem(DASHBOARD_FORBIDDEN_STORAGE_KEY);
-    if (!raw) return new Set<string>();
-    const parsed = JSON.parse(raw);
-    return new Set(Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []);
-  } catch {
-    return new Set<string>();
-  }
-};
-
 export default function Dashboard() {
   const [showAllDeals, setShowAllDeals] = useState(false);
   const [showAllActivities, setShowAllActivities] = useState(false);
@@ -220,16 +207,9 @@ export default function Dashboard() {
   const [livePipelineRows, setLivePipelineRows] = useState(pipelineStages);
   const [liveDeals, setLiveDeals] = useState<Deal[]>([]);
   const [liveActivities, setLiveActivities] = useState<Activity[]>([]);
-  const forbiddenEndpointsRef = useRef<Set<string>>(readForbiddenEndpoints());
+  const forbiddenEndpointsRef = useRef<Set<string>>(new Set());
   const lastAutoSyncAtRef = useRef(0);
   const isSyncingRef = useRef(false);
-
-  const persistForbiddenEndpoints = () => {
-    localStorage.setItem(
-      DASHBOARD_FORBIDDEN_STORAGE_KEY,
-      JSON.stringify(Array.from(forbiddenEndpointsRef.current))
-    );
-  };
 
   const runOptional = async <T,>(key: string, request: () => Promise<T>, fallback: T): Promise<T> => {
     if (forbiddenEndpointsRef.current.has(key)) {
@@ -241,7 +221,6 @@ export default function Dashboard() {
     } catch (error) {
       if (isPermissionDenied(error)) {
         forbiddenEndpointsRef.current.add(key);
-        persistForbiddenEndpoints();
         return fallback;
       }
       throw error;
@@ -277,8 +256,6 @@ export default function Dashboard() {
     isSyncingRef.current = true;
 
     const partnersId = localStorage.getItem('repowire_partners_id')?.trim();
-    const authSource = (localStorage.getItem('repowire_auth_source') ?? '').toLowerCase();
-    const isPublisherRole = authSource.includes('/publicher/');
 
     setLiveError(null);
 
@@ -290,23 +267,17 @@ export default function Dashboard() {
 
       const [summaryResult, publishersResult, advertisersResult, dealsResult, activitiesResult] = await Promise.allSettled([
         runOptional('conversionSummary', () => repowireApi.conversionSummary(), null),
-        isPublisherRole
-          ? Promise.resolve(null)
-          : runOptional(
-            'publisherList',
-            () => repowireApi.publisherList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
-            null
-          ),
-        isPublisherRole
-          ? Promise.resolve(null)
-          : runOptional(
-            'advertiserList',
-            () => repowireApi.advertiserList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
-            null
-          ),
-        isPublisherRole
-          ? Promise.resolve([] as Deal[])
-          : runOptional('offerList', () => fetchLiveDeals(), [] as Deal[]),
+        runOptional(
+          'publisherList',
+          () => repowireApi.publisherList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
+          null
+        ),
+        runOptional(
+          'advertiserList',
+          () => repowireApi.advertiserList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
+          null
+        ),
+        runOptional('offerList', () => fetchLiveDeals(), [] as Deal[]),
         runOptional('activitiesFeed', () => fetchLiveActivities(), [] as Activity[]),
       ]);
 
@@ -321,13 +292,11 @@ export default function Dashboard() {
           () => repowireApi.conversionList({ page: 1, ...dateRange, partners_Id: partnersId || undefined }),
           [] as unknown
         ),
-        isPublisherRole
-          ? Promise.resolve([])
-          : runOptional(
-            'conversionAccordingToDate',
-            () => repowireApi.conversionAccordingToDate({ startDate: dateRange.startDate }),
-            [] as unknown
-          ),
+        runOptional(
+          'conversionAccordingToDate',
+          () => repowireApi.conversionAccordingToDate({ startDate: dateRange.startDate }),
+          [] as unknown
+        ),
       ]);
 
       const conversionList = isFulfilled(conversionListResult) ? conversionListResult.value : [];

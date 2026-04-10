@@ -1,4 +1,4 @@
-import { apiRequest } from './httpClient';
+import { ApiError, apiRequest } from './httpClient';
 import { Activity, Contact, Deal } from '../types';
 
 type AnyRecord = Record<string, unknown>;
@@ -125,7 +125,6 @@ const parseRecentDate = (row: AnyRecord): string => {
 export const hasAuthToken = () => Boolean(localStorage.getItem('repowire_token')?.trim());
 
 const getPartnersId = () => localStorage.getItem('repowire_partners_id')?.trim() || '';
-const getAuthSource = () => (localStorage.getItem('repowire_auth_source') ?? '').toLowerCase();
 
 const withPartnersId = (query: Record<string, string | number>) => {
   const partnersId = getPartnersId();
@@ -175,9 +174,6 @@ export async function fetchLiveContacts(): Promise<Contact[]> {
 }
 
 export async function fetchLiveDeals(): Promise<Deal[]> {
-  const isPublisherRole = getAuthSource().includes('/publicher/');
-  if (isPublisherRole) return [];
-
   const raw = await apiRequest('/offer/offerList', {
     method: 'GET',
     query: { page: 1, limit: 200 },
@@ -205,20 +201,28 @@ export async function fetchLiveDeals(): Promise<Deal[]> {
 }
 
 export async function fetchLiveActivities(): Promise<Activity[]> {
-  const isPublisherRole = getAuthSource().includes('/publicher/');
-  const [conversionsResult, trackingResult, sentResult] = await Promise.allSettled([
-    apiRequest('/conversion/ConversionList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) }),
-    isPublisherRole
-      ? Promise.resolve([])
-      : apiRequest('/tracking/trackingList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) }),
-    isPublisherRole
-      ? Promise.resolve([])
-      : apiRequest('/sentLogs/sentLogList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) }),
-  ]);
+  const permissionDenied = (error: unknown) => error instanceof ApiError && (error.status === 401 || error.status === 403);
+  const denied = (fetchLiveActivities as typeof fetchLiveActivities & { deniedEndpoints?: Set<string> }).deniedEndpoints
+    ?? ((fetchLiveActivities as typeof fetchLiveActivities & { deniedEndpoints?: Set<string> }).deniedEndpoints = new Set<string>());
 
-  const conversionsRaw = conversionsResult.status === 'fulfilled' ? conversionsResult.value : [];
-  const trackingRaw = trackingResult.status === 'fulfilled' ? trackingResult.value : [];
-  const sentRaw = sentResult.status === 'fulfilled' ? sentResult.value : [];
+  const requestOptional = async (key: string, request: () => Promise<unknown>) => {
+    if (denied.has(key)) return [] as unknown;
+    try {
+      return await request();
+    } catch (error) {
+      if (permissionDenied(error)) {
+        denied.add(key);
+        return [] as unknown;
+      }
+      throw error;
+    }
+  };
+
+  const [conversionsRaw, trackingRaw, sentRaw] = await Promise.all([
+    requestOptional('conversionList', () => apiRequest('/conversion/ConversionList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) })),
+    requestOptional('trackingList', () => apiRequest('/tracking/trackingList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) })),
+    requestOptional('sentLogList', () => apiRequest('/sentLogs/sentLogList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) })),
+  ]);
 
   const conversions = extractList(conversionsRaw).map((item, index) => {
     const row = asObject(item) ?? {};
