@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Search, Bell, Plus, ChevronDown } from 'lucide-react';
+import { Search, Bell, Plus, ChevronDown, Menu } from 'lucide-react';
 import { NavPage } from '../types';
 
 interface HeaderProps {
   activePage: NavPage;
   sidebarCollapsed: boolean;
+  onToggleMobileSidebar: () => void;
   onSignOut: () => void;
 }
 
@@ -27,7 +28,7 @@ const pageTitles: Partial<Record<NavPage, { title: string; subtitle: string }>> 
 
 const formatTitle = (page: NavPage) => page.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
 
-export default function Header({ activePage, sidebarCollapsed, onSignOut }: HeaderProps) {
+export default function Header({ activePage, sidebarCollapsed, onToggleMobileSidebar, onSignOut }: HeaderProps) {
   const [searchValue, setSearchValue] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -50,18 +51,29 @@ export default function Header({ activePage, sidebarCollapsed, onSignOut }: Head
 
   return (
     <header
-      className={`fixed top-0 right-0 z-20 border-b border-white/70 bg-white/85 backdrop-blur-md transition-all duration-300 ${
-        sidebarCollapsed ? 'left-16' : 'left-60'
+      className={`fixed top-0 right-0 z-20 border-b border-white/70 bg-white/85 backdrop-blur-md transition-all duration-300 left-0 ${
+        sidebarCollapsed ? 'lg:left-16' : 'lg:left-60'
       }`}
     >
-      <div className="flex items-center justify-between px-6 py-3.5">
-        <div>
+      <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5">
+        <div className="min-w-0 flex items-center gap-2.5">
+          <button
+            type="button"
+            aria-label="Open sidebar"
+            onClick={onToggleMobileSidebar}
+            className="lg:hidden rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50"
+          >
+            <Menu size={18} />
+          </button>
+
+          <div className="min-w-0">
           <h1 className="text-slate-900 font-bold text-lg leading-tight">{title}</h1>
-          <p className="text-slate-500 text-xs mt-0.5">{subtitle}</p>
+          <p className="text-slate-500 text-xs mt-0.5 hidden sm:block truncate">{subtitle}</p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="relative hidden md:block">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -102,7 +114,7 @@ export default function Header({ activePage, sidebarCollapsed, onSignOut }: Head
             )}
           </div>
 
-          <div className="relative">
+          <div className="relative hidden sm:block">
             <button
               onClick={() => {
                 setShowQuickActions((current) => !current);
@@ -129,7 +141,7 @@ export default function Header({ activePage, sidebarCollapsed, onSignOut }: Head
             )}
           </div>
 
-          <div className="flex items-center gap-2 pl-3 border-l border-slate-200 cursor-pointer group">
+          <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-slate-200 cursor-pointer group">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-sm font-bold shadow-sm">
               A
             </div>
@@ -139,7 +151,7 @@ export default function Header({ activePage, sidebarCollapsed, onSignOut }: Head
             </div>
             <button
               onClick={onSignOut}
-              className="ml-2 rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700"
+              className="ml-1 sm:ml-2 rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700"
             >
               Sign out
             </button>

@@ -83,6 +83,7 @@ export async function apiRequest<T = unknown>(path: string, options: ApiRequestO
   const requestInit: RequestInit = {
     method,
     headers: requestHeaders,
+    cache: 'no-store',
   };
 
   if (authToken) {

@@ -23,6 +23,8 @@ interface SidebarProps {
   onNavigate: (page: NavPage) => void;
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen: boolean;
+  onCloseMobile: () => void;
 }
 
 type SidebarNode = {
@@ -143,7 +145,7 @@ const navItems: SidebarNode[] = [
   { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
 ];
 
-export default function Sidebar({ activePage, onNavigate, collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ activePage, onNavigate, collapsed, onToggle, mobileOpen, onCloseMobile }: SidebarProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     campaigns: true,
     reports: false,
@@ -183,6 +185,9 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle }:
               toggleExpanded(item.id);
             }
             onNavigate(item.id);
+            if (window.innerWidth < 1024) {
+              onCloseMobile();
+            }
           }}
           className={`w-full flex items-center gap-3 rounded-xl transition-all duration-200 group ${
             depth === 0
@@ -212,12 +217,21 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle }:
   };
 
   return (
-    <aside
-      className={`fixed left-0 top-0 h-full z-30 flex flex-col transition-all duration-300 ease-in-out ${
-        collapsed ? 'w-16' : 'w-60'
-      }`}
-      style={{ background: 'linear-gradient(180deg, #1A8EC1 0%, #1288BC 100%)' }}
-    >
+    <>
+      <button
+        type="button"
+        aria-label="Close sidebar"
+        onClick={onCloseMobile}
+        className={`fixed inset-0 z-30 bg-slate-900/40 transition-opacity duration-200 lg:hidden ${
+          mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+      />
+      <aside
+        className={`fixed left-0 top-0 h-full z-40 flex flex-col transform transition-all duration-300 ease-in-out ${
+          collapsed ? 'lg:w-16' : 'lg:w-60'
+        } w-72 max-w-[86vw] ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        style={{ background: 'linear-gradient(180deg, #1A8EC1 0%, #1288BC 100%)' }}
+      >
       <div className={`flex items-center gap-3 px-4 py-5 border-b border-white/10 ${collapsed ? 'justify-center' : ''}`}>
         <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0 shadow-lg shadow-cyan-900/20">
           <Sparkles size={16} className="text-white" />
@@ -279,12 +293,13 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle }:
         )}
         <button
           onClick={onToggle}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-cyan-100/90 hover:text-white hover:bg-white/10 transition-all duration-200 text-xs"
+          className="hidden lg:flex w-full items-center justify-center gap-2 py-2.5 rounded-xl text-cyan-100/90 hover:text-white hover:bg-white/10 transition-all duration-200 text-xs"
         >
           <ChevronRight size={14} className={`transition-transform duration-300 ${collapsed ? '' : 'rotate-180'}`} />
           {!collapsed && <span>Collapse</span>}
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

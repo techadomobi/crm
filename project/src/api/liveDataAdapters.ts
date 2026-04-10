@@ -125,6 +125,7 @@ const parseRecentDate = (row: AnyRecord): string => {
 export const hasAuthToken = () => Boolean(localStorage.getItem('repowire_token')?.trim());
 
 const getPartnersId = () => localStorage.getItem('repowire_partners_id')?.trim() || '';
+const getAuthSource = () => (localStorage.getItem('repowire_auth_source') ?? '').toLowerCase();
 
 const withPartnersId = (query: Record<string, string | number>) => {
   const partnersId = getPartnersId();
@@ -174,6 +175,9 @@ export async function fetchLiveContacts(): Promise<Contact[]> {
 }
 
 export async function fetchLiveDeals(): Promise<Deal[]> {
+  const isPublisherRole = getAuthSource().includes('/publicher/');
+  if (isPublisherRole) return [];
+
   const raw = await apiRequest('/offer/offerList', {
     method: 'GET',
     query: { page: 1, limit: 200 },
@@ -201,11 +205,20 @@ export async function fetchLiveDeals(): Promise<Deal[]> {
 }
 
 export async function fetchLiveActivities(): Promise<Activity[]> {
-  const [conversionsRaw, trackingRaw, sentRaw] = await Promise.all([
+  const isPublisherRole = getAuthSource().includes('/publicher/');
+  const [conversionsResult, trackingResult, sentResult] = await Promise.allSettled([
     apiRequest('/conversion/ConversionList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) }),
-    apiRequest('/tracking/trackingList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) }),
-    apiRequest('/sentLogs/sentLogList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) }),
+    isPublisherRole
+      ? Promise.resolve([])
+      : apiRequest('/tracking/trackingList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) }),
+    isPublisherRole
+      ? Promise.resolve([])
+      : apiRequest('/sentLogs/sentLogList', { method: 'GET', query: withPartnersId({ page: 1, limit: 100 }) }),
   ]);
+
+  const conversionsRaw = conversionsResult.status === 'fulfilled' ? conversionsResult.value : [];
+  const trackingRaw = trackingResult.status === 'fulfilled' ? trackingResult.value : [];
+  const sentRaw = sentResult.status === 'fulfilled' ? sentResult.value : [];
 
   const conversions = extractList(conversionsRaw).map((item, index) => {
     const row = asObject(item) ?? {};

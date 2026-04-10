@@ -80,6 +80,12 @@ export default function App() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  const handleNavigate = (page: NavPage) => {
+    setActivePage(page);
+    setMobileSidebarOpen(false);
+  };
 
   const renderPage = () => {
     switch (activePage) {
@@ -240,13 +246,16 @@ export default function App() {
     <div className="min-h-screen bg-app-shell">
       <Sidebar
         activePage={activePage}
-        onNavigate={setActivePage}
+        onNavigate={handleNavigate}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(c => !c)}
+        mobileOpen={mobileSidebarOpen}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
       />
       <Header
         activePage={activePage}
         sidebarCollapsed={sidebarCollapsed}
+        onToggleMobileSidebar={() => setMobileSidebarOpen((current) => !current)}
         onSignOut={() => {
           localStorage.removeItem('repowire_token');
           localStorage.removeItem('repowire_partners_id');
@@ -258,11 +267,11 @@ export default function App() {
         }}
       />
       <main
-        className={`transition-all duration-300 pt-20 min-h-screen ${
-          sidebarCollapsed ? 'pl-16' : 'pl-60'
+        className={`transition-all duration-300 pt-24 lg:pt-20 min-h-screen pl-0 ${
+          sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-60'
         }`}
       >
-        <div className="p-6 max-w-[1600px]">
+        <div className="p-4 sm:p-6 max-w-[1600px]">
           {renderPage()}
         </div>
       </main>

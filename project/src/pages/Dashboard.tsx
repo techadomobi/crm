@@ -185,6 +185,12 @@ const derivePipelineFromRecords = (records: unknown[]) => {
   }));
 };
 
+const isFulfilled = <T,>(result: PromiseSettledResult<T>): result is PromiseFulfilledResult<T> => result.status === 'fulfilled';
+
+const isPermissionDenied = (reason: unknown) => {
+  return reason instanceof ApiError && (reason.status === 401 || reason.status === 403);
+};
+
 export default function Dashboard() {
   const [showAllDeals, setShowAllDeals] = useState(false);
   const [showAllActivities, setShowAllActivities] = useState(false);
@@ -228,6 +234,8 @@ export default function Dashboard() {
 
   const loadLiveKpis = async () => {
     const partnersId = localStorage.getItem('repowire_partners_id')?.trim();
+    const authSource = (localStorage.getItem('repowire_auth_source') ?? '').toLowerCase();
+    const isPublisherRole = authSource.includes('/publicher/');
 
     setLiveError(null);
 
@@ -237,32 +245,43 @@ export default function Dashboard() {
       startDate.setDate(startDate.getDate() - 6);
       const dateRange = { startDate: toDateKey(startDate), endDate: toDateKey(endDate) };
 
-      const [summary, publishers, advertisers, dealsResponse, activitiesResponse] = await Promise.all([
+      const [summaryResult, publishersResult, advertisersResult, dealsResult, activitiesResult] = await Promise.allSettled([
         repowireApi.conversionSummary(),
-        repowireApi.publisherList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
-        repowireApi.advertiserList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
-        fetchLiveDeals(),
+        isPublisherRole
+          ? Promise.resolve(null)
+          : repowireApi.publisherList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
+        isPublisherRole
+          ? Promise.resolve(null)
+          : repowireApi.advertiserList({ page: 1, limit: 1, partners_Id: partnersId || undefined }),
+        isPublisherRole ? Promise.resolve([] as Deal[]) : fetchLiveDeals(),
         fetchLiveActivities(),
       ]);
 
+      const dealsResponse = isFulfilled(dealsResult) ? dealsResult.value : [];
+      const activitiesResponse = isFulfilled(activitiesResult) ? activitiesResult.value : [];
       setLiveDeals(dealsResponse);
       setLiveActivities(activitiesResponse);
 
-      let conversionList: unknown = [];
-      let dateBasedConversions: unknown = [];
+      const [conversionListResult, dateBasedResult] = await Promise.allSettled([
+        repowireApi.conversionList({ page: 1, ...dateRange, partners_Id: partnersId || undefined }),
+        isPublisherRole
+          ? Promise.resolve([])
+          : repowireApi.conversionAccordingToDate({ startDate: dateRange.startDate }),
+      ]);
 
-      try {
-        [conversionList, dateBasedConversions] = await Promise.all([
-          repowireApi.conversionList({ page: 1, ...dateRange, partners_Id: partnersId || undefined }),
-          repowireApi.conversionAccordingToDate({ startDate: dateRange.startDate }),
-        ]);
-      } catch {
-        conversionList = [];
-        dateBasedConversions = [];
-      }
+      const conversionList = isFulfilled(conversionListResult) ? conversionListResult.value : [];
+      const dateBasedConversions = isFulfilled(dateBasedResult) ? dateBasedResult.value : [];
 
-      const revenue = findNumberDeep(summary.totalRevenue) ?? 1_360_000;
-      const conversions = findNumberDeep(summary.totalConversion) ?? fallbackConversions;
+      const summary = isFulfilled(summaryResult) ? summaryResult.value : null;
+      const publishers = isFulfilled(publishersResult) ? publishersResult.value : null;
+      const advertisers = isFulfilled(advertisersResult) ? advertisersResult.value : null;
+
+      const revenueFromDeals = dealsResponse.reduce((sum, deal) => sum + (deal.value || 0), 0);
+      const revenue = findNumberDeep(summary?.totalRevenue) ?? (revenueFromDeals > 0 ? revenueFromDeals : 1_360_000);
+      const conversions =
+        findNumberDeep(summary?.totalConversion)
+        ?? findCountDeep(conversionList)
+        ?? (activitiesResponse.length > 0 ? activitiesResponse.length : fallbackConversions);
       const publishersCount = findCountDeep(publishers) ?? fallbackPublishers;
       const advertisersCount = findCountDeep(advertisers) ?? fallbackAdvertisers;
 
@@ -309,6 +328,46 @@ export default function Dashboard() {
         };
       });
 
+      const liveSuccessCount = [
+        summaryResult,
+        publishersResult,
+        advertisersResult,
+        dealsResult,
+        activitiesResult,
+        conversionListResult,
+        dateBasedResult,
+      ].filter(isFulfilled).length;
+
+      const deniedCount = [
+        summaryResult,
+        publishersResult,
+        advertisersResult,
+        dealsResult,
+        activitiesResult,
+        conversionListResult,
+        dateBasedResult,
+      ].filter((result) => result.status === 'rejected' && isPermissionDenied(result.reason)).length;
+
+      if (liveSuccessCount === 0 && deniedCount === 0) {
+        throw new Error('No live dashboard endpoints succeeded.');
+      }
+
+      const rejectionReasons = [
+        summaryResult,
+        publishersResult,
+        advertisersResult,
+        dealsResult,
+        activitiesResult,
+        conversionListResult,
+        dateBasedResult,
+      ]
+        .filter((result) => result.status === 'rejected' && !isPermissionDenied(result.reason))
+        .map((result) => {
+          const reason = result.reason;
+          if (reason instanceof ApiError) return `HTTP ${reason.status}`;
+          return 'request failed';
+        });
+
       setChartPoints(liveSeries);
       setLivePipelineRows(livePipeline.length > 0 ? livePipeline : pipelineStages);
 
@@ -319,6 +378,12 @@ export default function Dashboard() {
         advertisers: advertisersCount,
         source: 'live',
       });
+
+      if (rejectionReasons.length > 0) {
+        setLiveError(`Partial live data loaded (${liveSuccessCount}/7 endpoints). ${rejectionReasons.slice(0, 2).join(', ')}.`);
+      } else if (liveSuccessCount > 0) {
+        setLiveError(null);
+      }
     } catch (error) {
       if (error instanceof ApiError && error.status !== 401 && error.status !== 403) {
         setLiveError(`Backend request failed (${error.status}). Try refreshing after saving a token in Settings.`);
@@ -344,6 +409,26 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadLiveKpis();
+  }, []);
+
+  useEffect(() => {
+    const onWindowFocus = () => {
+      loadLiveKpis();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadLiveKpis();
+      }
+    };
+
+    window.addEventListener('focus', onWindowFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', onWindowFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, []);
 
   const kpiCards = useMemo(
