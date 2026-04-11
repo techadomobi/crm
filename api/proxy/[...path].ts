@@ -20,6 +20,44 @@ const toPathname = (input: string | string[] | undefined) => {
   return `/${input}`;
 };
 
+const buildUpstreamBody = (req: VercelRequest): BodyInit | undefined => {
+  if (['GET', 'HEAD'].includes(req.method ?? 'GET')) return undefined;
+
+  const contentType = String(req.headers['content-type'] ?? '').toLowerCase();
+  const body = (req as unknown as { body?: unknown }).body;
+  if (body === null || body === undefined) return undefined;
+
+  if (typeof body === 'string' || body instanceof Uint8Array || body instanceof ArrayBuffer) {
+    return body as BodyInit;
+  }
+
+  if (contentType.includes('application/x-www-form-urlencoded') && typeof body === 'object') {
+    const params = new URLSearchParams();
+    Object.entries(body as Record<string, unknown>).forEach(([key, value]) => {
+      if (value === null || value === undefined) return;
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          if (item === null || item === undefined) return;
+          params.append(key, String(item));
+        });
+        return;
+      }
+      params.append(key, String(value));
+    });
+    return params.toString();
+  }
+
+  if (contentType.includes('application/json') && typeof body === 'object') {
+    return JSON.stringify(body);
+  }
+
+  if (typeof body === 'object') {
+    return JSON.stringify(body);
+  }
+
+  return String(body);
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   withCors(res);
 
@@ -57,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const upstreamResponse = await fetch(upstreamUrl, {
     method: req.method,
     headers: requestHeaders,
-    body: ['GET', 'HEAD'].includes(req.method ?? 'GET') ? undefined : (req as unknown as { body?: BodyInit }).body,
+    body: buildUpstreamBody(req),
     duplex: 'half',
   });
 
