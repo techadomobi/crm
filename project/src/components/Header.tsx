@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, Bell, Plus, ChevronDown, Menu, CheckCircle } from 'lucide-react';
 import { NavPage } from '../types';
 
@@ -7,11 +7,13 @@ interface HeaderProps {
   sidebarCollapsed: boolean;
   onToggleMobileSidebar: () => void;
   onSignOut: () => void;
+  onQuickAction: (action: 'create-campaign' | 'add-contact' | 'log-activity' | 'generate-report') => void;
   displayName: string;
+  displayRole: string;
 }
 
 const pageTitles: Partial<Record<NavPage, { title: string; subtitle: string }>> = {
-  dashboard: { title: 'Dashboard', subtitle: 'Welcome back, Alex. Here\'s what\'s happening.' },
+  dashboard: { title: 'Dashboard', subtitle: 'Welcome back. Here\'s what\'s happening.' },
   campaigns: { title: 'Campaigns', subtitle: 'Create and optimize campaigns with better targeting control' },
   publishers: { title: 'Publishers', subtitle: 'Manage publisher quality, access, and postback tracking' },
   advertisers: { title: 'Advertisers', subtitle: 'Monitor advertiser integrations, SLAs, and postbacks' },
@@ -29,10 +31,19 @@ const pageTitles: Partial<Record<NavPage, { title: string; subtitle: string }>> 
 
 const formatTitle = (page: NavPage) => page.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
 
-export default function Header({ activePage, sidebarCollapsed, onToggleMobileSidebar, onSignOut, displayName }: HeaderProps) {
+export default function Header({ activePage, sidebarCollapsed, onToggleMobileSidebar, onSignOut, onQuickAction, displayName, displayRole }: HeaderProps) {
   const [searchValue, setSearchValue] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setLastSyncAt(new Date());
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const notifications = useMemo(
     () => [
@@ -49,8 +60,9 @@ export default function Header({ activePage, sidebarCollapsed, onToggleMobileSid
   };
 
   const { title, subtitle } = titleData;
-  const avatarLetter = (displayName.trim()[0] || 'U').toUpperCase();
-  const welcomeSubtitle = activePage === 'dashboard' ? `Welcome back, ${displayName}. Here's what's happening.` : subtitle;
+  const fallbackIdentity = displayName.trim() || localStorage.getItem('repowire_user_email')?.split('@')[0] || 'Account';
+  const avatarLetter = (fallbackIdentity[0] || 'A').toUpperCase();
+  const welcomeSubtitle = activePage === 'dashboard' ? `Welcome back, ${fallbackIdentity}. Here's what's happening.` : subtitle;
 
   return (
     <header
@@ -84,6 +96,12 @@ export default function Header({ activePage, sidebarCollapsed, onToggleMobileSid
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden lg:flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-2.5 py-1">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            <span className="text-[11px] font-semibold text-emerald-700">Live auto refresh: 30s</span>
+            <span className="text-[11px] text-emerald-600">{lastSyncAt.toLocaleTimeString()}</span>
+          </div>
+
           <div className="relative hidden md:block">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -139,13 +157,21 @@ export default function Header({ activePage, sidebarCollapsed, onToggleMobileSid
             </button>
             {showQuickActions && (
               <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                {['Create campaign', 'Add contact', 'Log activity', 'Generate report'].map((label) => (
+                {[
+                  { id: 'create-campaign', label: 'Create campaign' },
+                  { id: 'add-contact', label: 'Add contact' },
+                  { id: 'log-activity', label: 'Log activity' },
+                  { id: 'generate-report', label: 'Generate report' },
+                ].map((item) => (
                   <button
-                    key={label}
-                    onClick={() => setShowQuickActions(false)}
+                    key={item.id}
+                    onClick={() => {
+                      setShowQuickActions(false);
+                      onQuickAction(item.id as 'create-campaign' | 'add-contact' | 'log-activity' | 'generate-report');
+                    }}
                     className="w-full rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 transition-colors"
                   >
-                    {label}
+                    {item.label}
                   </button>
                 ))}
               </div>
@@ -157,8 +183,8 @@ export default function Header({ activePage, sidebarCollapsed, onToggleMobileSid
               {avatarLetter}
             </div>
             <div className="hidden sm:block">
-              <p className="text-slate-800 text-xs font-semibold leading-tight group-hover:text-blue-600 transition-colors">{displayName}</p>
-              <p className="text-slate-400 text-xs">Sales Manager</p>
+              <p className="text-slate-800 text-xs font-semibold leading-tight group-hover:text-blue-600 transition-colors">{fallbackIdentity}</p>
+              <p className="text-slate-400 text-xs">{displayRole}</p>
             </div>
             <button
               onClick={onSignOut}

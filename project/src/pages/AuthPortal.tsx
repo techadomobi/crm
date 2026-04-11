@@ -219,7 +219,7 @@ export default function AuthPortal({ mode, onModeChange, onAuthenticate, authErr
                     <input
                       value={name}
                       onChange={(event) => setName(event.target.value)}
-                      placeholder="Alex Rivera"
+                      placeholder="Enter your full name"
                       className={`w-full rounded-xl border px-10 py-2.5 text-sm outline-none transition-all focus:ring-2 ${
                         validationErrors.name
                           ? 'border-rose-300 bg-rose-50 text-slate-700 focus:border-rose-500 focus:ring-rose-500/20'

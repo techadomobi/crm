@@ -13,6 +13,7 @@ export default function Contacts() {
   const [contactList, setContactList] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'prospect'>('all');
   const [sortField, setSortField] = useState<'name' | 'value' | 'lastContact'>('name');
@@ -32,6 +33,7 @@ export default function Contacts() {
     try {
       const rows = await fetchLiveContacts();
       setContactList(rows);
+      setLastUpdatedAt(new Date());
     } catch {
       setLoadError('Failed to load live contacts from OffersMeta API.');
       setContactList([]);
@@ -43,6 +45,45 @@ export default function Contacts() {
   useEffect(() => {
     void loadContacts();
   }, [loadContacts]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadContacts();
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, [loadContacts]);
+
+  useEffect(() => {
+    const onQuickAction = (event: Event) => {
+      const customEvent = event as CustomEvent<{ action?: string }>;
+      if (customEvent.detail?.action !== 'create-contact') return;
+
+      const name = window.prompt('Contact name');
+      if (!name) return;
+      const email = window.prompt('Contact email') ?? '';
+      const company = window.prompt('Company name') ?? 'New Company';
+
+      const newContact: Contact = {
+        id: `local-contact-${Date.now()}`,
+        name: name.trim(),
+        email: email.trim(),
+        phone: '',
+        company: company.trim() || 'New Company',
+        status: 'prospect',
+        value: 0,
+        lastContact: new Date().toISOString().slice(0, 10),
+        avatar: (name.match(/\b\w/g)?.slice(0, 2).join('') ?? 'NC').toUpperCase(),
+        tags: ['new'],
+      };
+
+      setContactList((current) => [newContact, ...current]);
+      setNotice('New contact added to the live UI list.');
+    };
+
+    window.addEventListener('repowire:quick-action', onQuickAction as EventListener);
+    return () => window.removeEventListener('repowire:quick-action', onQuickAction as EventListener);
+  }, []);
 
   const pageSize = 6;
 
@@ -173,6 +214,9 @@ export default function Contacts() {
           >
             <Plus size={14} /> {loading ? 'Refreshing...' : 'Refresh Live'}
           </button>
+          <p className="text-[11px] text-slate-500 w-full sm:w-auto sm:ml-2">
+            Auto refresh: 30s {lastUpdatedAt ? `· Last update: ${lastUpdatedAt.toLocaleTimeString()}` : ''}
+          </p>
         </div>
 
         <div className="overflow-x-auto">

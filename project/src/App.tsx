@@ -11,11 +11,13 @@ import Settings from './pages/Settings';
 import CrmModuleDetails from './pages/CrmModuleDetails';
 import AuthPortal from './pages/AuthPortal';
 import { NavPage } from './types';
-import { AdminLoginPayload, repowireApi, SignupPayload } from './api/repowireApi';
+import { AdminLoginPayload, AuthAccountType, repowireApi, SignupPayload } from './api/repowireApi';
 import { ApiError } from './api/httpClient';
 
 const SESSION_KEY = 'repowire_session_active';
 const USER_NAME_KEY = 'repowire_user_name';
+const USER_EMAIL_KEY = 'repowire_user_email';
+const USER_ROLE_KEY = 'repowire_user_role';
 
 const routeToPage: Record<string, NavPage> = {
   '/': 'dashboard',
@@ -40,6 +42,13 @@ const pageToRoute: Partial<Record<NavPage, string>> = {
 
 const normalizeRoute = (pathname: string) => pathname.replace(/\/+$/, '') || '/';
 const getPageFromPath = (pathname: string): NavPage => routeToPage[normalizeRoute(pathname)] ?? 'dashboard';
+
+const resolveAccountTypeFromRole = (role: string): AuthAccountType => {
+  const normalizedRole = role.trim().toLowerCase();
+  if (normalizedRole.includes('advertiser')) return 'advertiser';
+  if (normalizedRole.includes('publisher')) return 'publisher';
+  return 'admin';
+};
 
 const tryExtractJwt = (text: string): string | null => {
   const normalized = text.replace(/^Bearer\s+/i, '').trim();
@@ -142,10 +151,49 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [displayName, setDisplayName] = useState(localStorage.getItem(USER_NAME_KEY) || 'Alex Rivera');
+  const deriveFallbackName = () => {
+    const savedName = localStorage.getItem(USER_NAME_KEY)?.trim() || '';
+    if (savedName) return savedName;
+
+    const savedEmail = localStorage.getItem(USER_EMAIL_KEY)?.trim() || '';
+    if (savedEmail.includes('@')) return savedEmail.split('@')[0];
+
+    return '';
+  };
+
+  const [displayName, setDisplayName] = useState(deriveFallbackName());
+  const [displayEmail, setDisplayEmail] = useState(localStorage.getItem(USER_EMAIL_KEY) || '');
+  const [displayRole, setDisplayRole] = useState(localStorage.getItem(USER_ROLE_KEY) || 'User');
   const [activePage, setActivePage] = useState<NavPage>(getPageFromPath(window.location.pathname));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let cancelled = false;
+
+    const syncProfileName = async () => {
+      try {
+        const accountType = resolveAccountTypeFromRole(localStorage.getItem(USER_ROLE_KEY) || displayRole);
+        const profile = await repowireApi.fetchAccountProfile(accountType, localStorage.getItem('repowire_auth_source') || undefined);
+        const profileName = extractDisplayName(profile);
+
+        if (!cancelled && profileName) {
+          localStorage.setItem(USER_NAME_KEY, profileName);
+          setDisplayName(profileName);
+        }
+      } catch {
+        // Keep the current session name if the profile endpoint is unavailable.
+      }
+    };
+
+    void syncProfileName();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, displayRole]);
 
   useEffect(() => {
     const onPopState = () => {
@@ -165,15 +213,42 @@ export default function App() {
     setMobileSidebarOpen(false);
   };
 
+  const dispatchQuickAction = (action: 'create-contact' | 'create-deal' | 'create-activity' | 'refresh-reports') => {
+    window.dispatchEvent(new CustomEvent('repowire:quick-action', { detail: { action } }));
+  };
+
+  const handleQuickAction = (action: 'create-campaign' | 'add-contact' | 'log-activity' | 'generate-report') => {
+    if (action === 'add-contact') {
+      handleNavigate('contacts');
+      window.setTimeout(() => dispatchQuickAction('create-contact'), 50);
+      return;
+    }
+
+    if (action === 'create-campaign') {
+      handleNavigate('deals');
+      window.setTimeout(() => dispatchQuickAction('create-deal'), 50);
+      return;
+    }
+
+    if (action === 'log-activity') {
+      handleNavigate('activities');
+      window.setTimeout(() => dispatchQuickAction('create-activity'), 50);
+      return;
+    }
+
+    handleNavigate('reports');
+    window.setTimeout(() => dispatchQuickAction('refresh-reports'), 50);
+  };
+
   const renderPage = () => {
     switch (activePage) {
-      case 'dashboard': return <Dashboard />;
+      case 'dashboard': return <Dashboard displayName={displayName} displayEmail={displayEmail} />;
       case 'contacts': return <Contacts />;
       case 'deals': return <Deals />;
       case 'activities': return <Activities />;
       case 'reports': return <Reports />;
       case 'apiDocs': return <ApiDocs />;
-      case 'settings': return <Settings />;
+      case 'settings': return <Settings displayName={displayName} displayEmail={displayEmail} displayRole={displayRole} />;
       default: return <CrmModuleDetails activePage={activePage} />;
     }
   };
@@ -409,8 +484,11 @@ export default function App() {
                   localStorage.setItem('repowire_auth_source', 'registration');
                   localStorage.setItem('repowire_last_auth_mode', 'register');
                   localStorage.setItem(SESSION_KEY, 'true');
+                  localStorage.setItem(USER_EMAIL_KEY, email.trim());
+                  localStorage.setItem(USER_ROLE_KEY, accountType === 'admin' ? 'Admin' : accountType === 'advertiser' ? 'Advertiser' : 'Publisher');
 
-                  const registerDisplayName = extractDisplayName(registerResult) ?? `${firstName} ${lastName}`.trim();
+                  const profileResult = await repowireApi.fetchAccountProfile(accountType, 'registration').catch(() => null);
+                  const registerDisplayName = extractDisplayName(profileResult) ?? extractDisplayName(registerResult) ?? `${firstName} ${lastName}`.trim();
                   if (registerDisplayName) {
                     localStorage.setItem(USER_NAME_KEY, registerDisplayName);
                     setDisplayName(registerDisplayName);
@@ -442,12 +520,15 @@ export default function App() {
               localStorage.setItem('repowire_last_auth_mode', mode);
             }
             localStorage.setItem(SESSION_KEY, 'true');
+            localStorage.setItem(USER_EMAIL_KEY, email.trim());
+            localStorage.setItem(USER_ROLE_KEY, accountType === 'admin' ? 'Admin' : accountType === 'advertiser' ? 'Advertiser' : 'Publisher');
 
             if (extractedPartnersId) {
               localStorage.setItem('repowire_partners_id', extractedPartnersId);
             }
 
-            const loginDisplayName = extractDisplayName(response) || extractDisplayName(name) || localStorage.getItem(USER_NAME_KEY) || email.trim().split('@')[0] || 'User';
+            const profileResponse = token ? await repowireApi.fetchAccountProfile(accountType, source).catch(() => null) : null;
+            const loginDisplayName = extractDisplayName(profileResponse) || extractDisplayName(response) || extractDisplayName(name) || localStorage.getItem(USER_NAME_KEY) || email.trim().split('@')[0] || 'Account';
             localStorage.setItem(USER_NAME_KEY, loginDisplayName);
             setDisplayName(loginDisplayName);
 
@@ -490,25 +571,33 @@ export default function App() {
         onToggle={() => setSidebarCollapsed(c => !c)}
         mobileOpen={mobileSidebarOpen}
         onCloseMobile={() => setMobileSidebarOpen(false)}
+        displayName={displayName}
+        displayRole={displayRole}
       />
       <Header
         activePage={activePage}
         sidebarCollapsed={sidebarCollapsed}
         onToggleMobileSidebar={() => setMobileSidebarOpen((current) => !current)}
+        onQuickAction={handleQuickAction}
         onSignOut={() => {
           localStorage.removeItem('repowire_token');
           localStorage.removeItem('repowire_partners_id');
           localStorage.removeItem('repowire_auth_source');
           localStorage.removeItem('repowire_last_auth_mode');
           localStorage.removeItem(USER_NAME_KEY);
+          localStorage.removeItem(USER_EMAIL_KEY);
+          localStorage.removeItem(USER_ROLE_KEY);
           localStorage.removeItem(SESSION_KEY);
           window.history.pushState({}, '', '/');
           setIsAuthenticated(false);
           setAuthMode('login');
           setAuthError(null);
-          setDisplayName('Alex Rivera');
+          setDisplayName('');
+          setDisplayEmail('');
+          setDisplayRole('User');
         }}
         displayName={displayName}
+        displayRole={displayRole}
       />
       <main
         className={`transition-all duration-300 pt-24 lg:pt-20 min-h-screen pl-0 ${

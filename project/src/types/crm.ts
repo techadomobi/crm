@@ -41,5 +41,7 @@ export interface DashboardOverview {
   activitiesDueToday: number;
   recentContacts: ContactRecord[];
   dealPipeline: Array<{ stage: string; value: number }>;
+  pipelineStages: Array<{ stage: string; count: number }>;
+  revenueSeries: Array<{ label: string; value: number }>;
   upcomingTasks: ActivityRecord[];
 }

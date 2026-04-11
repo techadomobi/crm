@@ -21,6 +21,7 @@ export default function Activities() {
   const [activityList, setActivityList] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [typeFilter, setTypeFilter] = useState<'all' | Activity['type']>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | Activity['status']>('all');
   const [notice, setNotice] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export default function Activities() {
     try {
       const rows = await fetchLiveActivities();
       setActivityList(rows);
+      setLastUpdatedAt(new Date());
     } catch {
       setLoadError('Failed to load live activity feeds from OffersMeta API.');
       setActivityList([]);
@@ -48,6 +50,43 @@ export default function Activities() {
   useEffect(() => {
     void loadActivities();
   }, [loadActivities]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadActivities();
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, [loadActivities]);
+
+  useEffect(() => {
+    const onQuickAction = (event: Event) => {
+      const customEvent = event as CustomEvent<{ action?: string }>;
+      if (customEvent.detail?.action !== 'create-activity') return;
+
+      const title = window.prompt('Activity title');
+      if (!title) return;
+      const contact = window.prompt('Contact name') ?? 'New Contact';
+
+      const newActivity: Activity = {
+        id: `local-activity-${Date.now()}`,
+        type: 'task',
+        title: title.trim(),
+        contact: contact.trim() || 'New Contact',
+        company: 'New Company',
+        date: new Date().toISOString(),
+        status: 'pending',
+        assignee: 'You',
+        notes: 'Created from header quick action',
+      };
+
+      setActivityList((current) => [newActivity, ...current]);
+      setNotice('New activity logged in the live UI feed.');
+    };
+
+    window.addEventListener('repowire:quick-action', onQuickAction as EventListener);
+    return () => window.removeEventListener('repowire:quick-action', onQuickAction as EventListener);
+  }, []);
 
   const filtered = activityList.filter(a => {
     return (typeFilter === 'all' || a.type === typeFilter) &&
@@ -142,6 +181,9 @@ export default function Activities() {
           >
             <Plus size={14} /> {loading ? 'Refreshing...' : 'Refresh Live'}
           </button>
+          <p className="text-[11px] text-slate-500 w-full sm:w-auto sm:ml-2">
+            Auto refresh: 30s {lastUpdatedAt ? `· Last update: ${lastUpdatedAt.toLocaleTimeString()}` : ''}
+          </p>
         </div>
 
         <div className="divide-y divide-slate-50">

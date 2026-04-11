@@ -15,31 +15,31 @@ export default function RevenueChart({
   data = [],
   title = 'Revenue Overview',
   subtitle = 'Oct 2025 – Apr 2026',
-  trendLabel = '+12.4% MoM',
+  trendLabel,
   totalLabel = 'Total this period',
 }: RevenueChartProps) {
-  if (data.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg transition-all duration-300">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h3 className="text-slate-900 font-semibold text-sm">{title}</h3>
-            <p className="text-slate-400 text-xs mt-0.5">{subtitle}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2.5 py-1 rounded-full">{trendLabel}</span>
-          </div>
-        </div>
+  const fallbackSeries: RevenuePoint[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => ({
+    month: day,
+    value: 0,
+  }));
+  const chartData = data.length > 0 ? data : fallbackSeries;
 
-        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-          No live revenue data available from the API yet.
-        </div>
-      </div>
-    );
-  }
+  const firstPoint = chartData[0]?.value ?? 0;
+  const lastPoint = chartData[chartData.length - 1]?.value ?? 0;
+  const delta = lastPoint - firstPoint;
+  const deltaPercent = firstPoint > 0 ? (delta / firstPoint) * 100 : 0;
+  const isUpTrend = delta >= 0;
+  const computedTrendLabel =
+    trendLabel ??
+    (firstPoint > 0
+      ? `${isUpTrend ? '+' : ''}${deltaPercent.toFixed(1)}% vs first point`
+      : 'Insufficient baseline');
+  const trendClassName = isUpTrend
+    ? 'text-emerald-600 bg-emerald-50'
+    : 'text-rose-600 bg-rose-50';
 
-  const max = Math.max(...data.map(d => d.value));
-  const min = Math.min(...data.map(d => d.value));
+  const max = Math.max(...chartData.map(d => d.value));
+  const min = Math.min(...chartData.map(d => d.value));
   const range = Math.max(max - min, 1);
 
   const W = 560;
@@ -47,8 +47,8 @@ export default function RevenueChart({
   const padX = 10;
   const padY = 10;
 
-  const pts = data.map((d, i) => {
-    const x = padX + (i / Math.max(data.length - 1, 1)) * (W - padX * 2);
+  const pts = chartData.map((d, i) => {
+    const x = padX + (i / Math.max(chartData.length - 1, 1)) * (W - padX * 2);
     const y = H - padY - ((d.value - min) / range) * (H - padY * 2);
     return { x, y, ...d };
   });
@@ -64,13 +64,21 @@ export default function RevenueChart({
           <p className="text-slate-400 text-xs mt-0.5">{subtitle}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2.5 py-1 rounded-full">{trendLabel}</span>
+          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${trendClassName}`}>
+            {isUpTrend ? 'Up' : 'Down'} · {computedTrendLabel}
+          </span>
         </div>
       </div>
 
+      {data.length === 0 && (
+        <div className="mb-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+          Live series is empty right now. Showing a placeholder trend so the graph area is always visible.
+        </div>
+      )}
+
       <div className="flex items-end gap-4 mb-4">
         <div>
-          <p className="text-2xl font-bold text-slate-900">${(data.reduce((sum, point) => sum + point.value, 0) / 1_000_000).toFixed(2)}M</p>
+          <p className="text-2xl font-bold text-slate-900">${(chartData.reduce((sum, point) => sum + point.value, 0) / 1_000_000).toFixed(2)}M</p>
           <p className="text-slate-400 text-xs">{totalLabel}</p>
         </div>
       </div>

@@ -7,7 +7,52 @@ const formatCurrency = (value: number) => {
   return `$${value.toLocaleString()}`;
 };
 
-export default function Dashboard() {
+function PipelineChart({ data }: { data: Array<{ stage: string; count: number }> }) {
+  const max = Math.max(...data.map((item) => item.count), 1);
+
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg transition-all duration-300">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h3 className="text-slate-900 font-semibold text-sm">Deal Pipeline (Live)</h3>
+          <p className="text-slate-400 text-xs mt-0.5">Number of deals per stage from API data</p>
+        </div>
+        <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2.5 py-1 rounded-full">Real-time</span>
+      </div>
+
+      {data.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          No live pipeline stages available yet.
+        </div>
+      ) : (
+        <div className="flex items-end gap-3 h-44 overflow-x-auto pb-1">
+          {data.map((item) => {
+            const height = Math.max((item.count / max) * 140, 8);
+            return (
+              <div key={item.stage} className="flex min-w-[72px] flex-1 flex-col items-center gap-2">
+                <span className="text-slate-600 text-xs font-semibold">{item.count}</span>
+                <div
+                  className="w-full rounded-t-xl bg-gradient-to-t from-blue-500 to-cyan-400 shadow-sm"
+                  style={{ height: `${height}px` }}
+                />
+                <span className="text-slate-400 text-xs text-center leading-tight uppercase tracking-wide">
+                  {item.stage.replace(/_/g, ' ').slice(0, 12)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface DashboardProps {
+  displayName: string;
+  displayEmail: string;
+}
+
+export default function Dashboard({ displayName, displayEmail }: DashboardProps) {
   const { data, isLoading, isError, error } = useDashboardOverview();
 
   if (isLoading) {
@@ -22,12 +67,21 @@ export default function Dashboard() {
     );
   }
 
-  const chartData = data.dealPipeline.length > 0
-    ? data.dealPipeline.map((row) => ({ month: row.stage, value: row.value }))
-    : [];
+  const revenueData = data.revenueSeries.map((point) => ({
+    month: point.label,
+    value: point.value,
+  }));
 
   return (
     <div className="space-y-6">
+      <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Signed in as</p>
+          <h2 className="text-2xl font-bold text-slate-900">{displayName || displayEmail.split('@')[0]}</h2>
+          <p className="text-sm text-slate-500">Your live CRM summary and graphs are shown below.</p>
+        </div>
+      </section>
+
       <div className="rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50 p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -52,13 +106,17 @@ export default function Dashboard() {
         <StatsCard label="Activities Due Today" value={String(data.activitiesDueToday)} change={0} changeLabel="Live from CRM API" icon={<CalendarClock size={18} />} color="rose" />
       </div>
 
-      <RevenueChart
-        data={chartData.map((point) => ({ month: point.month.slice(0, 3), value: point.value }))}
-        title="Deal Pipeline (Live)"
-        subtitle="Aggregated by stage"
-        trendLabel="Real-time"
-        totalLabel="Open + closed value"
-      />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <RevenueChart
+          data={revenueData}
+          title="Revenue Trend (Live)"
+          subtitle="Last 7 days from API data"
+          trendLabel="Real-time"
+          totalLabel="Revenue this week"
+        />
+
+        <PipelineChart data={data.pipelineStages} />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <section className="rounded-2xl border border-slate-100 bg-white p-5">

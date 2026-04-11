@@ -58,6 +58,7 @@ export default function Deals() {
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   const loadDeals = useCallback(async () => {
     if (!hasAuthToken()) {
@@ -71,6 +72,7 @@ export default function Deals() {
     try {
       const rows = await fetchLiveDeals();
       setDealItems(rows);
+      setLastUpdatedAt(new Date());
     } catch {
       setLoadError('Failed to load live deal data from OffersMeta API.');
       setDealItems([]);
@@ -82,6 +84,47 @@ export default function Deals() {
   useEffect(() => {
     void loadDeals();
   }, [loadDeals]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadDeals();
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, [loadDeals]);
+
+  useEffect(() => {
+    const onQuickAction = (event: Event) => {
+      const customEvent = event as CustomEvent<{ action?: string }>;
+      if (customEvent.detail?.action !== 'create-deal') return;
+
+      const title = window.prompt('Deal title');
+      if (!title) return;
+      const company = window.prompt('Company name') ?? 'New Company';
+      const valueRaw = window.prompt('Deal value (number)') ?? '0';
+      const parsedValue = Number(valueRaw.replace(/[^\d.]/g, ''));
+      const value = Number.isFinite(parsedValue) ? parsedValue : 0;
+
+      const newDeal: Deal = {
+        id: `local-deal-${Date.now()}`,
+        title: title.trim(),
+        contact: 'New Contact',
+        company: company.trim() || 'New Company',
+        value,
+        stage: 'lead',
+        probability: 15,
+        closeDate: new Date().toISOString().slice(0, 10),
+        assignee: 'You',
+        createdAt: new Date().toISOString(),
+      };
+
+      setDealItems((current) => [newDeal, ...current]);
+      setNotice('New deal added to the live UI board.');
+    };
+
+    window.addEventListener('repowire:quick-action', onQuickAction as EventListener);
+    return () => window.removeEventListener('repowire:quick-action', onQuickAction as EventListener);
+  }, []);
 
   const totalOpen = dealItems.filter(d => !['closed_won', 'closed_lost'].includes(d.stage)).reduce((s, d) => s + d.value, 0);
   const totalWon = dealItems.filter(d => d.stage === 'closed_won').reduce((s, d) => s + d.value, 0);
@@ -155,6 +198,10 @@ export default function Deals() {
           <Plus size={14} /> {loading ? 'Refreshing...' : 'Refresh Live'}
         </button>
       </div>
+
+      <p className="text-[11px] text-slate-500">
+        Auto refresh: 30s {lastUpdatedAt ? `· Last update: ${lastUpdatedAt.toLocaleTimeString()}` : ''}
+      </p>
 
       {view === 'kanban' ? (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 pb-4">

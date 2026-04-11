@@ -25,6 +25,8 @@ interface SidebarProps {
   onToggle: () => void;
   mobileOpen: boolean;
   onCloseMobile: () => void;
+  displayName: string;
+  displayRole: string;
 }
 
 type SidebarNode = {
@@ -145,7 +147,7 @@ const navItems: SidebarNode[] = [
   { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
 ];
 
-export default function Sidebar({ activePage, onNavigate, collapsed, onToggle, mobileOpen, onCloseMobile }: SidebarProps) {
+export default function Sidebar({ activePage, onNavigate, collapsed, onToggle, mobileOpen, onCloseMobile, displayName, displayRole }: SidebarProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     campaigns: true,
     reports: false,
@@ -247,10 +249,12 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle, m
       {!collapsed && (
         <div className="px-4 py-3 mx-3 mt-4 rounded-xl bg-white/10 border border-white/20">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-200 to-white flex items-center justify-center text-cyan-700 text-xs font-bold">A</div>
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-200 to-white flex items-center justify-center text-cyan-700 text-xs font-bold">
+              {(displayName.trim()[0] || 'U').toUpperCase()}
+            </div>
             <div>
-              <p className="text-white text-xs font-medium">Alex Rivera</p>
-              <p className="text-cyan-100 text-xs">CRM Manager</p>
+              <p className="text-white text-xs font-medium">{displayName || localStorage.getItem('repowire_user_email')?.split('@')[0] || 'Account'}</p>
+              <p className="text-cyan-100 text-xs">{displayRole}</p>
             </div>
           </div>
         </div>

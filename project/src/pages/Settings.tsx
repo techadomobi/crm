@@ -4,19 +4,6 @@ import BackendApiPanel from '../components/BackendApiPanel';
 import { repowireApi } from '../api/repowireApi';
 import { ApiError } from '../api/httpClient';
 
-const sections = [
-  {
-    title: 'Profile',
-    icon: <User size={16} />,
-    fields: [
-      { label: 'Full Name', value: 'Alex Rivera', type: 'text' },
-      { label: 'Email Address', value: 'alex@nexuscrm.io', type: 'email' },
-      { label: 'Phone', value: '+1 555 0100', type: 'tel' },
-      { label: 'Role', value: 'Sales Manager', type: 'text' },
-    ],
-  },
-];
-
 const quickSettings = [
   { icon: <Bell size={16} />, label: 'Notifications', sub: 'Email and push preferences', color: 'bg-amber-50 text-amber-600' },
   { icon: <Shield size={16} />, label: 'Security', sub: 'Password, 2FA, sessions', color: 'bg-emerald-50 text-emerald-600' },
@@ -32,7 +19,13 @@ const integrations = [
   { name: 'HubSpot', status: false, desc: 'Contact sync' },
 ];
 
-export default function Settings() {
+interface SettingsProps {
+  displayName: string;
+  displayEmail: string;
+  displayRole: string;
+}
+
+export default function Settings({ displayName, displayEmail, displayRole }: SettingsProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [authSource, setAuthSource] = useState<string>('unknown');
   const [authMode, setAuthMode] = useState<string>('unknown');
@@ -129,24 +122,47 @@ export default function Settings() {
         </div>
         <div className="p-5">
           <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-blue-500/20">A</div>
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-blue-500/20">{(displayName.trim()[0] || 'U').toUpperCase()}</div>
             <div>
-              <h4 className="text-slate-900 font-semibold">Alex Rivera</h4>
-              <p className="text-slate-400 text-sm">Sales Manager · NexusCRM Pro</p>
+              <h4 className="text-slate-900 font-semibold">{displayName || displayEmail.split('@')[0] || 'Account'}</h4>
+              <p className="text-slate-400 text-sm">{displayRole} · Live session profile</p>
               <button onClick={() => setNotice('Profile photo change flow opened.')} className="mt-2 text-blue-600 text-xs font-medium hover:text-blue-700 transition-colors">Change photo</button>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {sections[0].fields.map((f, i) => (
-              <div key={i}>
-                <label className="text-slate-500 text-xs font-medium block mb-1.5">{f.label}</label>
-                <input
-                  type={f.type}
-                  defaultValue={f.value}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
-                />
-              </div>
-            ))}
+            <div>
+              <label className="text-slate-500 text-xs font-medium block mb-1.5">Full Name</label>
+              <input
+                type="text"
+                defaultValue={displayName || displayEmail.split('@')[0] || 'Account'}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+              />
+            </div>
+            <div>
+              <label className="text-slate-500 text-xs font-medium block mb-1.5">Email Address</label>
+              <input
+                type="email"
+                defaultValue={displayEmail || 'missing@example.com'}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+              />
+            </div>
+            <div>
+              <label className="text-slate-500 text-xs font-medium block mb-1.5">Phone</label>
+              <input
+                type="tel"
+                defaultValue=""
+                placeholder="Add phone from API when available"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+              />
+            </div>
+            <div>
+              <label className="text-slate-500 text-xs font-medium block mb-1.5">Role</label>
+              <input
+                type="text"
+                defaultValue={displayRole}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+              />
+            </div>
           </div>
           <div className="mt-5 flex justify-end">
             <button onClick={() => setNotice('Profile settings saved successfully.')} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-5 py-2 rounded-xl transition-all active:scale-95 shadow-sm">

@@ -1,5 +1,7 @@
 import { apiRequest } from './httpClient';
 
+export type AuthAccountType = 'admin' | 'advertiser' | 'publisher';
+
 export type AdminLoginPayload = {
   partners_Id?: string;
   email: string;
@@ -44,6 +46,28 @@ export interface OfferListQuery extends ListQuery {
 }
 
 export type CreateOfferPayload = Record<string, unknown>;
+
+const profileEndpointPriority: Record<AuthAccountType, string[]> = {
+  admin: ['/subAdmin/viewData', '/admin/view'],
+  advertiser: ['/advertiser/advertiserView'],
+  publisher: ['/publicher/viewData'],
+};
+
+const getProfileEndpoints = (accountType: AuthAccountType, loginSource?: string) => {
+  if (accountType !== 'admin' || !loginSource) {
+    return profileEndpointPriority[accountType];
+  }
+
+  if (loginSource.includes('/admin/')) {
+    return ['/admin/view', '/subAdmin/viewData'];
+  }
+
+  if (loginSource.includes('/subAdmin/')) {
+    return ['/subAdmin/viewData', '/admin/view'];
+  }
+
+  return profileEndpointPriority.admin;
+};
 
 export const repowireApi = {
   adminLogin: (payload: AdminLoginPayload) =>
@@ -109,6 +133,23 @@ export const repowireApi = {
       asUrlEncoded: true,
       skipAuth: true,
     }),
+
+  fetchAccountProfile: async (accountType: AuthAccountType, loginSource?: string) => {
+    const endpoints = getProfileEndpoints(accountType, loginSource);
+    let lastError: unknown = null;
+
+    for (const endpoint of endpoints) {
+      try {
+        return await apiRequest(endpoint, {
+          method: 'GET',
+        });
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Unable to load account profile.');
+  },
 
   publisherList: (query?: ListQuery) =>
     apiRequest('/publicher/publisherList', {

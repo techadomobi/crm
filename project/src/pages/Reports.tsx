@@ -92,6 +92,8 @@ export default function Reports() {
   const [snapshot, setSnapshot] = useState<LiveReportSnapshot>(EMPTY_SNAPSHOT);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   const loadSnapshot = useCallback(async () => {
     if (!hasAuthToken()) {
@@ -106,6 +108,7 @@ export default function Reports() {
     try {
       const data = await fetchLiveReportSnapshot();
       setSnapshot(data);
+      setLastUpdatedAt(new Date());
     } catch {
       setSnapshot(EMPTY_SNAPSHOT);
       setError('Failed to load live report snapshot from OffersMeta API.');
@@ -116,6 +119,26 @@ export default function Reports() {
 
   useEffect(() => {
     void loadSnapshot();
+  }, [loadSnapshot]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadSnapshot();
+    }, 30_000);
+
+    return () => window.clearInterval(timer);
+  }, [loadSnapshot]);
+
+  useEffect(() => {
+    const onQuickAction = (event: Event) => {
+      const customEvent = event as CustomEvent<{ action?: string }>;
+      if (customEvent.detail?.action !== 'refresh-reports') return;
+      setNotice('Generating fresh live report snapshot...');
+      void loadSnapshot();
+    };
+
+    window.addEventListener('repowire:quick-action', onQuickAction as EventListener);
+    return () => window.removeEventListener('repowire:quick-action', onQuickAction as EventListener);
   }, [loadSnapshot]);
 
   const summary = useMemo(
@@ -152,8 +175,31 @@ export default function Reports() {
     [snapshot]
   );
 
+  const chartSeries = useMemo(() => {
+    if (snapshot.revenueSeries.length > 0) {
+      return snapshot.revenueSeries;
+    }
+
+    const fallbackLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const total = snapshot.totals.totalRevenue;
+    const weights = [0.08, 0.12, 0.16, 0.18, 0.2, 0.14, 0.12];
+
+    return fallbackLabels.map((label, index) => ({
+      label,
+      value: total > 0 ? Math.round(total * weights[index]) : 0,
+      color: '#3B82F6',
+    }));
+  }, [snapshot]);
+
   return (
     <div className="space-y-5 animate-fade-in">
+      {notice && (
+        <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm text-cyan-900 flex items-center justify-between">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} className="text-xs font-semibold text-cyan-700 hover:text-cyan-900">Dismiss</button>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
           {error}
@@ -170,6 +216,10 @@ export default function Reports() {
         </button>
       </div>
 
+      <p className="text-[11px] text-slate-500 text-right">
+        Auto refresh: 30s {lastUpdatedAt ? `· Last update: ${lastUpdatedAt.toLocaleTimeString()}` : ''}
+      </p>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {summary.map((item) => (
           <div key={item.label} className={`bg-white rounded-2xl p-5 border ${item.border} hover:shadow-md transition-all`}>
@@ -184,10 +234,9 @@ export default function Reports() {
         <div className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg transition-all">
           <h3 className="text-slate-900 font-semibold text-sm mb-1">Live Revenue Trend</h3>
           <p className="text-slate-400 text-xs mb-5">Last 7 days from authenticated API data</p>
-          {snapshot.revenueSeries.length > 0 ? (
-            <BarChart data={snapshot.revenueSeries} />
-          ) : (
-            <p className="text-sm text-slate-500">No live revenue series available yet.</p>
+          <BarChart data={chartSeries} />
+          {snapshot.revenueSeries.length === 0 && (
+            <p className="mt-3 text-xs text-slate-500">Live revenue points were empty, so this chart uses a totals-based fallback distribution.</p>
           )}
         </div>
 
