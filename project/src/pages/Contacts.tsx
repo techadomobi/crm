@@ -33,7 +33,7 @@ export default function Contacts() {
       const rows = await fetchLiveContacts();
       setContactList(rows);
     } catch {
-      setLoadError('Failed to load live contacts from Repowire API.');
+      setLoadError('Failed to load live contacts from OffersMeta API.');
       setContactList([]);
     } finally {
       setLoading(false);

@@ -108,7 +108,7 @@ export default function Reports() {
       setSnapshot(data);
     } catch {
       setSnapshot(EMPTY_SNAPSHOT);
-      setError('Failed to load live report snapshot from Repowire API.');
+      setError('Failed to load live report snapshot from OffersMeta API.');
     } finally {
       setLoading(false);
     }

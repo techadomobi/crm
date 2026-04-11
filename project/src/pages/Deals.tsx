@@ -72,7 +72,7 @@ export default function Deals() {
       const rows = await fetchLiveDeals();
       setDealItems(rows);
     } catch {
-      setLoadError('Failed to load live deal data from Repowire API.');
+      setLoadError('Failed to load live deal data from OffersMeta API.');
       setDealItems([]);
     } finally {
       setLoading(false);
@@ -290,7 +290,7 @@ export default function Deals() {
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs text-slate-500">Avg Deal Probability</p>
                 <p className="text-lg font-bold text-slate-900 mt-1">
-                  {Math.round(dealItems.reduce((sum, deal) => sum + deal.probability, 0) / dealItems.length)}%
+                  {dealItems.length ? Math.round(dealItems.reduce((sum, deal) => sum + deal.probability, 0) / dealItems.length) : 0}%
                 </p>
               </div>
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">

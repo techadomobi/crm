@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search, Bell, Plus, ChevronDown, Menu } from 'lucide-react';
+import { Search, Bell, Plus, ChevronDown, Menu, CheckCircle } from 'lucide-react';
 import { NavPage } from '../types';
 
 interface HeaderProps {
@@ -7,6 +7,7 @@ interface HeaderProps {
   sidebarCollapsed: boolean;
   onToggleMobileSidebar: () => void;
   onSignOut: () => void;
+  displayName: string;
 }
 
 const pageTitles: Partial<Record<NavPage, { title: string; subtitle: string }>> = {
@@ -28,7 +29,7 @@ const pageTitles: Partial<Record<NavPage, { title: string; subtitle: string }>> 
 
 const formatTitle = (page: NavPage) => page.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
 
-export default function Header({ activePage, sidebarCollapsed, onToggleMobileSidebar, onSignOut }: HeaderProps) {
+export default function Header({ activePage, sidebarCollapsed, onToggleMobileSidebar, onSignOut, displayName }: HeaderProps) {
   const [searchValue, setSearchValue] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -48,6 +49,8 @@ export default function Header({ activePage, sidebarCollapsed, onToggleMobileSid
   };
 
   const { title, subtitle } = titleData;
+  const avatarLetter = (displayName.trim()[0] || 'U').toUpperCase();
+  const welcomeSubtitle = activePage === 'dashboard' ? `Welcome back, ${displayName}. Here's what's happening.` : subtitle;
 
   return (
     <header
@@ -67,8 +70,16 @@ export default function Header({ activePage, sidebarCollapsed, onToggleMobileSid
           </button>
 
           <div className="min-w-0">
-          <h1 className="text-slate-900 font-bold text-lg leading-tight">{title}</h1>
-          <p className="text-slate-500 text-xs mt-0.5 hidden sm:block truncate">{subtitle}</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-slate-900 font-bold text-lg leading-tight">{title}</h1>
+            {activePage === 'apiDocs' && (
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 whitespace-nowrap">
+                <CheckCircle size={12} />
+                Live
+              </div>
+            )}
+          </div>
+          <p className="text-slate-500 text-xs mt-0.5 hidden sm:block truncate">{welcomeSubtitle}</p>
           </div>
         </div>
 
@@ -143,10 +154,10 @@ export default function Header({ activePage, sidebarCollapsed, onToggleMobileSid
 
           <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-slate-200 cursor-pointer group">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-sm font-bold shadow-sm">
-              A
+              {avatarLetter}
             </div>
             <div className="hidden sm:block">
-              <p className="text-slate-800 text-xs font-semibold leading-tight group-hover:text-blue-600 transition-colors">Alex Rivera</p>
+              <p className="text-slate-800 text-xs font-semibold leading-tight group-hover:text-blue-600 transition-colors">{displayName}</p>
               <p className="text-slate-400 text-xs">Sales Manager</p>
             </div>
             <button

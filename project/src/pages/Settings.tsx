@@ -60,7 +60,7 @@ export default function Settings() {
     setIsValidatingToken(true);
     try {
       await repowireApi.conversionSummary();
-      setTokenValidation('Valid: authenticated requests are working (checked via /conversion/* endpoints).');
+      setTokenValidation('Valid: authenticated requests are working against OffersMeta v2 endpoints.');
     } catch (error) {
       if (error instanceof ApiError) {
         setTokenValidation(`Invalid or unauthorized token (HTTP ${error.status}).`);

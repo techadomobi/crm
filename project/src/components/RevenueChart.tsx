@@ -1,5 +1,3 @@
-import { revenueData } from '../data/mockData';
-
 export interface RevenuePoint {
   month: string;
   value: number;
@@ -14,15 +12,35 @@ interface RevenueChartProps {
 }
 
 export default function RevenueChart({
-  data = revenueData,
+  data = [],
   title = 'Revenue Overview',
   subtitle = 'Oct 2025 – Apr 2026',
   trendLabel = '+12.4% MoM',
   totalLabel = 'Total this period',
 }: RevenueChartProps) {
+  if (data.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg transition-all duration-300">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-slate-900 font-semibold text-sm">{title}</h3>
+            <p className="text-slate-400 text-xs mt-0.5">{subtitle}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-600 text-xs font-semibold bg-emerald-50 px-2.5 py-1 rounded-full">{trendLabel}</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+          No live revenue data available from the API yet.
+        </div>
+      </div>
+    );
+  }
+
   const max = Math.max(...data.map(d => d.value));
   const min = Math.min(...data.map(d => d.value));
-  const range = max - min;
+  const range = Math.max(max - min, 1);
 
   const W = 560;
   const H = 160;

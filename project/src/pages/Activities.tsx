@@ -38,7 +38,7 @@ export default function Activities() {
       const rows = await fetchLiveActivities();
       setActivityList(rows);
     } catch {
-      setLoadError('Failed to load live activity feeds from Repowire API.');
+      setLoadError('Failed to load live activity feeds from OffersMeta API.');
       setActivityList([]);
     } finally {
       setLoading(false);

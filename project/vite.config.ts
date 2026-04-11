@@ -7,4 +7,14 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  server: {
+    proxy: {
+      '/api/proxy': {
+        target: 'https://apiv2.offersmeta.in',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api\/proxy/, ''),
+      },
+    },
+  },
 });

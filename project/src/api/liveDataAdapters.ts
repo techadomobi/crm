@@ -188,8 +188,8 @@ export async function fetchLiveDeals(): Promise<Deal[]> {
     return {
       id: extractId(row, `offer-${index}`),
       title: toString(row.title) || toString(row.offerName) || `Offer ${index + 1}`,
-      contact: toString(row.managerName) || toString(row.advertiserName) || 'Repowire User',
-      company: toString(row.companyName) || toString(row.advertiserName) || 'Repowire',
+      contact: toString(row.managerName) || toString(row.advertiserName) || 'OffersMeta User',
+      company: toString(row.companyName) || toString(row.advertiserName) || 'OffersMeta',
       value: toNumber(row.revenue) ?? toNumber(row.payout) ?? toNumber(row.amount) ?? 0,
       stage,
       probability: probabilityFromStage(stage),

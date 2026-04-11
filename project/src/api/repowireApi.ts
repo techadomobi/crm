@@ -1,6 +1,7 @@
 import { apiRequest } from './httpClient';
 
 export type AdminLoginPayload = {
+  partners_Id?: string;
   email: string;
   password: string;
 } & Record<string, unknown>;
@@ -49,35 +50,64 @@ export const repowireApi = {
     apiRequest('/admin/login', {
       method: 'POST',
       body: payload,
-      asFormData: true,
+      asUrlEncoded: true,
+      skipAuth: true,
     }),
 
   subAdminLogin: (payload: AdminLoginPayload) =>
     apiRequest('/subAdmin/login', {
       method: 'POST',
       body: payload,
-      asFormData: true,
+      asUrlEncoded: true,
+      skipAuth: true,
     }),
 
   publicherLogin: (payload: AdminLoginPayload) =>
     apiRequest('/publicher/login', {
       method: 'POST',
       body: payload,
-      asFormData: true,
+      asUrlEncoded: true,
+      skipAuth: true,
+    }),
+
+  advertiserLogin: (payload: AdminLoginPayload) =>
+    apiRequest('/advertiser/login', {
+      method: 'POST',
+      body: payload,
+      asUrlEncoded: true,
+      skipAuth: true,
+    }),
+
+  singleLogin: (payload: AdminLoginPayload) =>
+    apiRequest('/subAdmin/singleLogin', {
+      method: 'POST',
+      body: payload,
+      asUrlEncoded: true,
+      skipAuth: true,
     }),
 
   subAdminSignup: (payload: SignupPayload) =>
     apiRequest('/subAdmin/signup', {
       method: 'POST',
       body: payload,
-      asFormData: true,
+      asUrlEncoded: true,
+      skipAuth: true,
     }),
 
   publicherSignup: (payload: SignupPayload) =>
     apiRequest('/publicher/signup', {
       method: 'POST',
       body: payload,
-      asFormData: true,
+      asUrlEncoded: true,
+      skipAuth: true,
+    }),
+
+  advertiserSignup: (payload: SignupPayload) =>
+    apiRequest('/advertiser/advertiserSignup', {
+      method: 'POST',
+      body: payload,
+      asUrlEncoded: true,
+      skipAuth: true,
     }),
 
   publisherList: (query?: ListQuery) =>
@@ -130,12 +160,5 @@ export const repowireApi = {
     apiRequest('/offer/offerList', {
       method: 'GET',
       query,
-    }),
-
-  createOffer: (payload: CreateOfferPayload) =>
-    apiRequest('/offer/createOffr', {
-      method: 'POST',
-      body: payload,
-      asFormData: true,
     }),
 };
