@@ -15,6 +15,8 @@ interface HeaderProps {
 const pageTitles: Partial<Record<NavPage, { title: string; subtitle: string }>> = {
   dashboard: { title: 'Dashboard', subtitle: 'Welcome back. Here\'s what\'s happening.' },
   campaigns: { title: 'Campaigns', subtitle: 'Create and optimize campaigns with better targeting control' },
+  manageCampaigns: { title: 'Manage offers', subtitle: 'Live offer list, detail, and create — wired to /offer/*' },
+  createCampaign: { title: 'Create offer', subtitle: 'Multipart form for POST /offer/createOffer' },
   publishers: { title: 'Publishers', subtitle: 'Manage publisher quality, access, and postback tracking' },
   advertisers: { title: 'Advertisers', subtitle: 'Monitor advertiser integrations, SLAs, and postbacks' },
   invoices: { title: 'Invoices', subtitle: 'Track billing operations for publishers and advertisers' },
@@ -26,6 +28,7 @@ const pageTitles: Partial<Record<NavPage, { title: string; subtitle: string }>> 
   activities: { title: 'Activities', subtitle: 'Calls, emails, meetings, and tasks' },
   reports: { title: 'Reports & Analytics', subtitle: 'Insights into your sales performance' },
   apiDocs: { title: 'API Docs', subtitle: 'Swagger-backed endpoint reference and usage examples' },
+  apiStudio: { title: 'API Studio', subtitle: 'Execute every OffersMeta v2 operation — JSON, raw, and file responses' },
   settings: { title: 'Settings', subtitle: 'Manage your account and preferences' },
 };
 

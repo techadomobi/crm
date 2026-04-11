@@ -57,6 +57,7 @@ export type NavPage =
   | 'notifications'
   | 'support'
   | 'apiDocs'
+  | 'apiStudio'
   | 'settings';
 
 export interface Contact {

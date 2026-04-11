@@ -43,6 +43,7 @@ export interface ConversionListQuery extends ListQuery {
 export interface OfferListQuery extends ListQuery {
   page?: number;
   search?: string;
+  partners_Id?: string;
 }
 
 export type CreateOfferPayload = Record<string, unknown>;
@@ -200,6 +201,32 @@ export const repowireApi = {
   offerList: (query?: OfferListQuery) =>
     apiRequest('/offer/offerList', {
       method: 'GET',
+      query,
+    }),
+
+  viewOffer: (query: { offerId: string; partners_Id?: string }) =>
+    apiRequest('/offer/viewOffer', {
+      method: 'GET',
+      query,
+    }),
+
+  createOffer: (body: Record<string, unknown>) =>
+    apiRequest('/offer/createOffer', {
+      method: 'POST',
+      body,
+      asFormData: true,
+    }),
+
+  updateOffer: (body: Record<string, unknown>) =>
+    apiRequest('/offer/updateOffer', {
+      method: 'PUT',
+      body,
+      asFormData: true,
+    }),
+
+  deleteOffer: (query: { offerId: string; partners_Id?: string }) =>
+    apiRequest('/offer/deleteOffer', {
+      method: 'PUT',
       query,
     }),
 };

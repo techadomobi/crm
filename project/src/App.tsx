@@ -7,6 +7,8 @@ import Deals from './pages/Deals';
 import Activities from './pages/Activities';
 import Reports from './pages/Reports.tsx';
 import ApiDocs from './pages/ApiDocs';
+import ApiStudio from './pages/ApiStudio';
+import OffersManagement from './pages/OffersManagement';
 import Settings from './pages/Settings';
 import CrmModuleDetails from './pages/CrmModuleDetails';
 import AuthPortal from './pages/AuthPortal';
@@ -28,6 +30,9 @@ const routeToPage: Record<string, NavPage> = {
   '/reports': 'reports',
   '/settings': 'settings',
   '/api/docs': 'apiDocs',
+  '/api/studio': 'apiStudio',
+  '/campaigns/manage': 'manageCampaigns',
+  '/campaigns/create': 'createCampaign',
 };
 
 const pageToRoute: Partial<Record<NavPage, string>> = {
@@ -38,6 +43,9 @@ const pageToRoute: Partial<Record<NavPage, string>> = {
   reports: '/reports',
   settings: '/settings',
   apiDocs: '/api/docs',
+  apiStudio: '/api/studio',
+  manageCampaigns: '/campaigns/manage',
+  createCampaign: '/campaigns/create',
 };
 
 const normalizeRoute = (pathname: string) => pathname.replace(/\/+$/, '') || '/';
@@ -225,8 +233,7 @@ export default function App() {
     }
 
     if (action === 'create-campaign') {
-      handleNavigate('deals');
-      window.setTimeout(() => dispatchQuickAction('create-deal'), 50);
+      handleNavigate('createCampaign');
       return;
     }
 
@@ -248,6 +255,9 @@ export default function App() {
       case 'activities': return <Activities />;
       case 'reports': return <Reports />;
       case 'apiDocs': return <ApiDocs />;
+      case 'apiStudio': return <ApiStudio />;
+      case 'manageCampaigns': return <OffersManagement initialTab="list" />;
+      case 'createCampaign': return <OffersManagement initialTab="create" />;
       case 'settings': return <Settings displayName={displayName} displayEmail={displayEmail} displayRole={displayRole} />;
       default: return <CrmModuleDetails activePage={activePage} />;
     }

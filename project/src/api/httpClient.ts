@@ -85,7 +85,7 @@ const toUrlEncodedBody = (body: Record<string, unknown>) => {
   return params;
 };
 
-export async function apiRequest<T = unknown>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+const buildApiFetchInit = (path: string, options: ApiRequestOptions = {}) => {
   const {
     method = 'GET',
     query,
@@ -127,6 +127,86 @@ export async function apiRequest<T = unknown>(path: string, options: ApiRequestO
     }
   }
 
+  return { url, requestInit };
+};
+
+export type ApiExecuteResult =
+  | { kind: 'json'; status: number; ok: boolean; body: unknown }
+  | { kind: 'text'; status: number; ok: boolean; text: string }
+  | { kind: 'blob'; status: number; ok: boolean; blob: Blob; contentType: string; filename?: string };
+
+const parseContentDispositionFilename = (header: string | null): string | undefined => {
+  if (!header) return undefined;
+  const m = /filename\*?=(?:UTF-8''|")?([^";\n]+)/i.exec(header);
+  if (!m) return undefined;
+  try {
+    return decodeURIComponent(m[1].replace(/"/g, '').trim());
+  } catch {
+    return m[1].replace(/"/g, '').trim();
+  }
+};
+
+const isLikelyBinaryResponse = (contentType: string) => {
+  const ct = contentType.toLowerCase();
+  return (
+    ct.includes('application/vnd.openxmlformats') ||
+    ct.includes('application/vnd.ms-excel') ||
+    ct.includes('application/octet-stream') ||
+    ct.includes('application/zip') ||
+    ct.includes('application/pdf') ||
+    ct.includes('image/') ||
+    ct.includes('video/') ||
+    ct.includes('audio/')
+  );
+};
+
+/** Same transport as {@link apiRequest} but preserves binary bodies (exports) and returns structured result. */
+export async function apiExecute(path: string, options: ApiRequestOptions = {}): Promise<ApiExecuteResult> {
+  const { url, requestInit } = buildApiFetchInit(path, options);
+  const response = await fetch(url, requestInit);
+  const contentType = response.headers.get('content-type') ?? '';
+
+  const readErrorPayload = async (): Promise<unknown> => {
+    if (isLikelyBinaryResponse(contentType)) {
+      const buf = await response.arrayBuffer();
+      return `[binary ${buf.byteLength} bytes]`;
+    }
+    const text = await response.text();
+    try {
+      return text ? JSON.parse(text) : null;
+    } catch {
+      return text;
+    }
+  };
+
+  if (!response.ok) {
+    const data = await readErrorPayload();
+    throw new ApiError(`Request failed with status ${response.status}`, response.status, data);
+  }
+
+  if (contentType.includes('application/json')) {
+    const text = await response.text();
+    let body: unknown = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = text;
+    }
+    return { kind: 'json', status: response.status, ok: response.ok, body };
+  }
+
+  if (isLikelyBinaryResponse(contentType)) {
+    const blob = await response.blob();
+    const filename = parseContentDispositionFilename(response.headers.get('content-disposition'));
+    return { kind: 'blob', status: response.status, ok: response.ok, blob, contentType, filename };
+  }
+
+  const text = await response.text();
+  return { kind: 'text', status: response.status, ok: response.ok, text };
+}
+
+export async function apiRequest<T = unknown>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const { url, requestInit } = buildApiFetchInit(path, options);
   const response = await fetch(url, requestInit);
   const text = await response.text();
   let data: unknown = null;

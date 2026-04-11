@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { BookOpenText, ExternalLink, FileText, KeyRound, Building2, ShieldCheck, ServerCog } from 'lucide-react';
 import { runSmokeTests, SmokeResult } from '../api/smokeTests';
 import { API_BASE_URL, RequestMethod } from '../api/httpClient';
+import SwaggerApiConsole from '../components/SwaggerApiConsole';
 
 const API_DOCS_URL = 'https://apiv2.offersmeta.in/API-docs/';
 
@@ -453,6 +454,8 @@ export default function ApiDocs() {
         </div>
       </section>
 
+      <SwaggerApiConsole embedded />
+
       <section className="rounded-3xl border border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50 p-5">
         <div className="flex items-start gap-4">
           <div>
@@ -464,7 +467,7 @@ export default function ApiDocs() {
               <span className="block">• <strong>Production ready:</strong> Fully connected to OffersMeta v2 API with role-based auth</span>
               <span className="block">• <strong>Quick start:</strong> Log in with your account to fetch live data in any module</span>
               <span className="block">• <strong>API testing:</strong> Use the Bulk Runner below to validate individual endpoints</span>
-              <span className="block">• <strong>Need help?</strong> View the <a href="https://github.com" target="_blank" className="underline font-semibold hover:text-amber-900">SETUP.md</a> guide for credentials and examples</span>
+              <span className="block">• <strong>Need help?</strong> Open the official <a href={API_DOCS_URL} target="_blank" rel="noreferrer" className="underline font-semibold hover:text-amber-900">Swagger UI</a> for parameter details</span>
             </p>
           </div>
         </div>
