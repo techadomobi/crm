@@ -3,7 +3,14 @@ import type { ApiErrorResponse } from '../types/api';
 import { AppApiError } from '../types/api';
 import { useAppStore } from '../store/appStore';
 
-const baseURL = import.meta.env.VITE_PROXY_BASE_URL ?? import.meta.env.VITE_API_BASE_URL ?? '/api/proxy';
+const resolveApiBaseUrl = () => {
+  const raw = String(import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_PROXY_BASE_URL ?? '/api/proxy').trim();
+  if (!raw) return '/api/proxy';
+  if (raw === '/api' || raw === '/api/') return '/api/proxy';
+  return raw.replace(/\/+$/, '');
+};
+
+const baseURL = resolveApiBaseUrl();
 
 export const apiClient = axios.create({
   baseURL,

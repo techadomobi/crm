@@ -1,4 +1,11 @@
-export const API_BASE_URL = import.meta.env.VITE_PROXY_BASE_URL ?? import.meta.env.VITE_API_BASE_URL ?? '/api/proxy';
+const resolveApiBaseUrl = () => {
+  const raw = String(import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_PROXY_BASE_URL ?? '/api/proxy').trim();
+  if (!raw) return '/api/proxy';
+  if (raw === '/api' || raw === '/api/') return '/api/proxy';
+  return raw.replace(/\/+$/, '');
+};
+
+export const API_BASE_URL = resolveApiBaseUrl();
 const DIRECT_API_BASE_URL = 'https://apiv2.offersmeta.in';
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
