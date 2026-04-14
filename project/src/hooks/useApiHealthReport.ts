@@ -37,8 +37,14 @@ export function useApiHealthReport() {
       setHasSuccessfulRun(true);
 
       const failed = report.results.filter((row) => row.status === 'fail').length;
+      const warned = report.results.filter((row) => row.status === 'warn').length;
+      const passed = report.results.filter((row) => row.status === 'pass').length;
       if (failed > 0) {
-        setNotice(`${failed} endpoints failed. Review details below.`);
+        if (failed === report.executedTotal && warned === 0 && passed === 0) {
+          setNotice('All executed endpoints failed at transport/server level. Verify VITE_API_BASE_URL and deployed proxy/server health first.');
+        } else {
+          setNotice(`${failed} endpoints failed. Review details below.`);
+        }
       } else if (report.source === 'core-fallback') {
         setNotice(`Full swagger catalog unavailable. ${report.fallbackReason ?? 'Unable to load live swagger source.'}`);
       }

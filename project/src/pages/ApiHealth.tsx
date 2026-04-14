@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import { SmokeResult } from '../api/smokeTests';
 import { useApiHealthReport } from '../hooks/useApiHealthReport';
+import { API_BASE_URL } from '../api/httpClient';
 
 const badgeClass: Record<SmokeResult['status'], string> = {
   pass: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -115,6 +116,7 @@ export default function ApiHealth() {
               Catalog source: {catalogSource === 'swagger' ? 'Live Swagger' : catalogSource === 'core' ? 'Core checks' : 'Swagger unavailable'}
               {catalogSourceUrl ? ` • ${catalogSourceUrl}` : ''}
             </p>
+            <p className="mt-1 text-xs text-slate-500">Active API base: {API_BASE_URL}</p>
             {catalogSource === 'core-fallback' && fallbackReason && (
               <p className="mt-1 text-xs text-rose-600">{fallbackReason}</p>
             )}

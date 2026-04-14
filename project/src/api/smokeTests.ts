@@ -280,22 +280,31 @@ const runOneSmokeTest = async (test: TestCase): Promise<SmokeResult> => {
     };
   } catch (error) {
     if (error instanceof ApiError) {
+      const errorMeta = (error.data && typeof error.data === 'object') ? (error.data as Record<string, unknown>) : null;
+      const errorUrl = typeof errorMeta?.url === 'string' ? errorMeta.url : '';
+      const errorPath = typeof errorMeta?.path === 'string' ? errorMeta.path : '';
+      const detailSuffix = [errorPath ? `path=${errorPath}` : '', errorUrl ? `url=${errorUrl}` : ''].filter(Boolean).join(' ');
+
       if (test.expectedStatuses?.includes(error.status)) {
         return {
           name: test.name,
           endpoint: test.endpoint,
           method: test.method,
           status: 'pass',
-          detail: `HTTP ${error.status} (expected)`,
+          detail: `HTTP ${error.status} (expected)${detailSuffix ? ` ${detailSuffix}` : ''}`,
         };
       }
+
+      const detail = error.status === 0
+        ? `Network/Error: ${error.message}${detailSuffix ? ` ${detailSuffix}` : ''}`
+        : `HTTP ${error.status}${detailSuffix ? ` ${detailSuffix}` : ''}`;
 
       return {
         name: test.name,
         endpoint: test.endpoint,
         method: test.method,
         status: getStatusFromHttp(error.status),
-        detail: `HTTP ${error.status}`,
+        detail,
       };
     }
 
@@ -304,7 +313,7 @@ const runOneSmokeTest = async (test: TestCase): Promise<SmokeResult> => {
       endpoint: test.endpoint,
       method: test.method,
       status: 'fail',
-      detail: 'Network/Error',
+      detail: error instanceof Error ? `Network/Error: ${error.message}` : 'Network/Error',
     };
   }
 };
