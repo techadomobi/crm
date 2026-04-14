@@ -522,18 +522,32 @@ export default function App() {
         authError={authError}
         isSubmitting={isAuthenticating}
         onAuthenticate={async ({ mode, accountType, partnersId, email, password, name }) => {
-          const loginAttempts: Array<{ source: string; call: (payload: AdminLoginPayload) => Promise<unknown>; payload: AdminLoginPayload }> =
-            accountType === 'admin'
+          const commonPayload = { email: email.trim(), password };
+          const loginAttempts: Array<{ source: string; call: (payload: AdminLoginPayload) => Promise<unknown>; payload: AdminLoginPayload }> = [
+            ...(accountType === 'admin' && partnersId.trim()
+              ? [{ source: '/subAdmin/singleLogin', call: repowireApi.singleLogin, payload: { partners_Id: partnersId.trim(), ...commonPayload } }]
+              : []),
+            ...(accountType === 'admin'
               ? [
-                  ...(partnersId.trim()
-                    ? [{ source: '/subAdmin/singleLogin', call: repowireApi.singleLogin, payload: { partners_Id: partnersId.trim(), email: email.trim(), password } }]
-                    : []),
-                  { source: '/subAdmin/login', call: repowireApi.subAdminLogin, payload: { email: email.trim(), password } },
-                  { source: '/admin/login', call: repowireApi.adminLogin, payload: { email: email.trim(), password } },
+                  { source: '/subAdmin/login', call: repowireApi.subAdminLogin, payload: commonPayload },
+                  { source: '/admin/login', call: repowireApi.adminLogin, payload: commonPayload },
+                  { source: '/advertiser/login', call: repowireApi.advertiserLogin, payload: commonPayload },
+                  { source: '/publicher/login', call: repowireApi.publicherLogin, payload: commonPayload },
                 ]
               : accountType === 'advertiser'
-                ? [{ source: '/advertiser/login', call: repowireApi.advertiserLogin, payload: { email: email.trim(), password } }]
-                : [{ source: '/publicher/login', call: repowireApi.publicherLogin, payload: { email: email.trim(), password } }];
+                ? [
+                    { source: '/advertiser/login', call: repowireApi.advertiserLogin, payload: commonPayload },
+                    { source: '/admin/login', call: repowireApi.adminLogin, payload: commonPayload },
+                    { source: '/subAdmin/login', call: repowireApi.subAdminLogin, payload: commonPayload },
+                    { source: '/publicher/login', call: repowireApi.publicherLogin, payload: commonPayload },
+                  ]
+                : [
+                    { source: '/publicher/login', call: repowireApi.publicherLogin, payload: commonPayload },
+                    { source: '/admin/login', call: repowireApi.adminLogin, payload: commonPayload },
+                    { source: '/subAdmin/login', call: repowireApi.subAdminLogin, payload: commonPayload },
+                    { source: '/advertiser/login', call: repowireApi.advertiserLogin, payload: commonPayload },
+                  ]),
+          ];
 
           const splitName = (rawName?: string) => {
             const parts = (rawName ?? '').trim().split(/\s+/).filter(Boolean);
@@ -609,6 +623,12 @@ export default function App() {
                 lastError = new Error('No response from server');
               } catch (error) {
                 const msg = error instanceof Error ? error.message : String(error);
+                const lowered = msg.toLowerCase();
+                if (lowered.includes('404') || lowered.includes('not found')) {
+                  console.log(`[Auth] ✗ Not found at ${login.source}, trying next endpoint`);
+                  lastError = error;
+                  continue;
+                }
                 console.log(`[Auth] ✗ Error at ${login.source}: ${msg}`);
                 lastError = error;
               }
