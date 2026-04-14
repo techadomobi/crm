@@ -78,7 +78,7 @@ export default function RevenueChart({
 
       <div className="flex items-end gap-4 mb-4">
         <div>
-          <p className="text-2xl font-bold text-slate-900">${(chartData.reduce((sum, point) => sum + point.value, 0) / 1_000_000).toFixed(2)}M</p>
+          <p className="text-2xl font-bold text-slate-900">${chartData.reduce((sum, point) => sum + point.value, 0).toLocaleString()}</p>
           <p className="text-slate-400 text-xs">{totalLabel}</p>
         </div>
       </div>
