@@ -6,6 +6,8 @@ export default function Advertisers() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [countryFilter, setCountryFilter] = useState('all');
 
   const { data, isLoading, isError, error, refetch } = useAffiliates({
     type: 'advertisers',
@@ -17,10 +19,21 @@ export default function Advertisers() {
   const filteredRows = useMemo(
     () => data.filter((row) => {
       const haystack = [row.company, row.contactPerson, row.email, row.phone, row.country, row.manager].join(' ').toLowerCase();
-      return haystack.includes(search.toLowerCase());
+      const matchesSearch = haystack.includes(search.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || row.status.toLowerCase() === statusFilter.toLowerCase();
+      const matchesCountry = countryFilter === 'all' || row.country.toLowerCase() === countryFilter.toLowerCase();
+      return matchesSearch && matchesStatus && matchesCountry;
     }),
-    [data, search]
+    [data, search, statusFilter, countryFilter]
   );
+
+  const countries = useMemo(() => {
+    const unique = new Set<string>();
+    data.forEach((row) => {
+      if (row.country) unique.add(row.country);
+    });
+    return [...unique].sort((a, b) => a.localeCompare(b));
+  }, [data]);
 
   const totalActive = filteredRows.filter((row) => row.status.toLowerCase().includes('active')).length;
 
@@ -36,10 +49,16 @@ export default function Advertisers() {
             <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900">Advertisers</h1>
             <p className="mt-2 text-sm text-slate-500">Live data loaded from the advertiser API and shown in the table below.</p>
           </div>
-          <button type="button" onClick={() => void refetch()} className="inline-flex items-center gap-2 rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-800">
-            <RefreshCw size={16} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => void refetch()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              <RefreshCw size={16} />
+              Refresh
+            </button>
+            <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-cyan-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-800">
+              +
+              Create Advertiser
+            </button>
+          </div>
         </div>
       </section>
 
@@ -72,7 +91,19 @@ export default function Advertisers() {
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-9 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-cyan-500 focus:bg-white focus:outline-none"
             />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+              <option value="all">All Statuses</option>
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="INACTIVE">INACTIVE</option>
+              <option value="PENDING">PENDING</option>
+            </select>
+            <select value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+              <option value="all">All Countries</option>
+              {countries.map((country) => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
             <label className="text-sm text-slate-600">
               Page size{' '}
               <select

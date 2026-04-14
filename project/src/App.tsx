@@ -18,6 +18,8 @@ import Settings from './pages/Settings';
 import AuthPortal from './pages/AuthPortal';
 import Affiliates from './pages/Affiliates';
 import Advertisers from './pages/Advertisers';
+import PerformanceConsole from './pages/PerformanceConsole';
+import AnalyticsConsole from './pages/AnalyticsConsole';
 import { NavPage } from './types';
 import { AdminLoginPayload, AuthAccountType, repowireApi, SignupPayload } from './api/repowireApi';
 import { ApiError } from './api/httpClient';
@@ -484,7 +486,7 @@ export default function App() {
       case 'advertisers': return <Advertisers />;
       case 'deals': return <Deals />;
       case 'activities': return <Activities />;
-      case 'reports': return <ReportsWorkspace key="reports" initialView="summary" />;
+      case 'reports': return <PerformanceConsole />;
       case 'campaignsReport': return <ReportsWorkspace key="campaignsReport" initialView="campaignsReport" />;
       case 'publishersReport': return <ReportsWorkspace key="publishersReport" initialView="publishersReport" />;
       case 'advertisersReport': return <ReportsWorkspace key="advertisersReport" initialView="advertisersReport" />;
@@ -496,7 +498,7 @@ export default function App() {
       case 'samplingReport': return <ReportsWorkspace key="samplingReport" initialView="samplingReport" />;
       case 'comparisonReport': return <ReportsWorkspace key="comparisonReport" initialView="comparisonReport" />;
       case 'clickReport': return <ReportsWorkspace key="clickReport" initialView="clickReport" />;
-      case 'conversionReport': return <ReportsWorkspace key="conversionReport" initialView="conversionReport" />;
+      case 'conversionReport': return <AnalyticsConsole />;
       case 'impressionReport': return <ReportsWorkspace key="impressionReport" initialView="impressionReport" />;
       case 'postbackLogs': return <ReportsWorkspace key="postbackLogs" initialView="postbackLogs" />;
       case 'recentExports': return <ReportsWorkspace key="recentExports" initialView="recentExports" />;

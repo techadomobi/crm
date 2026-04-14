@@ -27,6 +27,7 @@ export type NavPage =
   | 'postbackLogs'
   | 'recentExports'
   | 'contacts'
+  | 'affiliates'
   | 'deals'
   | 'activities'
   | 'publishers'
