@@ -13,6 +13,7 @@ export type RangeMetrics = {
   profit: number;
   pipeline: Array<{ stage: string; count: number }>;
   chart: Array<{ month: string; value: number }>;
+  chartMetric: 'revenue' | 'clicks';
 };
 
 const toNumber = (value: unknown) => {
@@ -113,6 +114,7 @@ const buildRangeMetrics = (
   const events = activitiesInRange.length;
 
   const revenueByDay = new Map<string, number>();
+  const clicksByDay = new Map<string, number>();
   const stageCounts = new Map<string, number>();
 
   dealsInRange.forEach((deal) => {
@@ -125,11 +127,30 @@ const buildRangeMetrics = (
     stageCounts.set(stage, (stageCounts.get(stage) ?? 0) + 1);
   });
 
+  activitiesInRange.forEach((activity) => {
+    const day = toIsoDateKey(activity.dueDate);
+    if (!day) return;
+
+    const type = (activity.type ?? '').toLowerCase();
+    if (type === 'call' || type === 'click') {
+      clicksByDay.set(day, (clicksByDay.get(day) ?? 0) + 1);
+    }
+  });
+
   const axis = buildDateAxis(startDate, endDate);
-  const chart = axis.map((day) => ({
+  const revenueChart = axis.map((day) => ({
     month: formatChartLabel(day),
     value: revenueByDay.get(day) ?? 0,
   }));
+  const clicksChart = axis.map((day) => ({
+    month: formatChartLabel(day),
+    value: clicksByDay.get(day) ?? 0,
+  }));
+
+  const revenueHasSignal = revenueChart.some((point) => point.value > 0);
+  const clickHasSignal = clicksChart.some((point) => point.value > 0);
+  const chartMetric: 'revenue' | 'clicks' = revenueHasSignal || !clickHasSignal ? 'revenue' : 'clicks';
+  const chart = chartMetric === 'revenue' ? revenueChart : clicksChart;
 
   const pipeline = Array.from(stageCounts.entries())
     .map(([stage, count]) => ({ stage, count }))
@@ -146,6 +167,7 @@ const buildRangeMetrics = (
     profit,
     pipeline,
     chart,
+    chartMetric,
   };
 };
 

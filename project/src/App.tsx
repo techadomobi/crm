@@ -264,8 +264,16 @@ const normalizeDisplayName = (value: string | null | undefined): string | null =
 const extractPartnersId = (input: unknown): string | null => {
   if (!input || typeof input !== 'object') return null;
 
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      const nested = extractPartnersId(item);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
   const object = input as Record<string, unknown>;
-  const directKeys = ['partners_Id', 'partnersId', 'partnerId', 'partner_id'];
+  const directKeys = ['partners_Id', 'partnersId', 'partners_id', 'partnersID', 'partnerId', 'partner_id'];
   for (const key of directKeys) {
     const value = object[key];
     if (typeof value === 'string' && value.trim()) return value.trim();
@@ -777,7 +785,7 @@ export default function App() {
                     setDisplayName(registerDisplayName);
                   }
                   
-                  const partnersId = extractPartnersId(registerResult);
+                  const partnersId = extractPartnersId(profileResult) ?? extractPartnersId(registerResult);
                   if (partnersId) {
                     localStorage.setItem('repowire_partners_id', partnersId);
                   }
@@ -820,6 +828,11 @@ export default function App() {
               'Account';
             localStorage.setItem(USER_NAME_KEY, loginDisplayName);
             setDisplayName(loginDisplayName);
+
+            const profilePartnersId = extractPartnersId(profileResponse);
+            if (profilePartnersId) {
+              localStorage.setItem('repowire_partners_id', profilePartnersId);
+            }
 
             setIsAuthenticated(true);
             handleNavigate('dashboard');

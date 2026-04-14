@@ -58,5 +58,14 @@ export function useAffiliates(options: UseAffiliatesOptions = {}) {
     void fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    const handleSessionUpdated = () => {
+      void fetchData();
+    };
+
+    window.addEventListener('repowire-session-updated', handleSessionUpdated as EventListener);
+    return () => window.removeEventListener('repowire-session-updated', handleSessionUpdated as EventListener);
+  }, [fetchData]);
+
   return { data, isLoading, isError, error, refetch: fetchData };
 }

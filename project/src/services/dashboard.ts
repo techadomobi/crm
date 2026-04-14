@@ -74,6 +74,17 @@ const readPartnersId = () =>
     ?? localStorage.getItem('partners_Id')
     ?? '').trim();
 
+const readAuthToken = () =>
+  (localStorage.getItem('repowire_token')
+    ?? localStorage.getItem('access_token')
+    ?? localStorage.getItem('token')
+    ?? '').trim();
+
+const isRejected = <T>(result: PromiseSettledResult<T>): result is PromiseRejectedResult =>
+  result.status === 'rejected';
+
+const allRejected = (results: PromiseSettledResult<unknown>[]) => results.every(isRejected);
+
 const buildMetricQueryVariants = (base: Record<string, string>) => {
   const partnersId = readPartnersId();
   const variants: Array<Record<string, string>> = [base];
@@ -205,6 +216,11 @@ const buildRevenueSeries = (deals: Array<{ value: number; createdAt: string }>) 
 
 export const dashboardService = {
   async rangeSummary(range: RangeKey) {
+    const token = readAuthToken();
+    if (!token) {
+      throw new Error('Live dashboard requires a saved bearer token. Add it in Settings and refresh.');
+    }
+
     const { startDate, endDate } = rangeDates(range);
     const rangeQuery = { startDate, endDate };
 
@@ -218,6 +234,10 @@ export const dashboardService = {
       requestMetricWithFallback(METRIC_ENDPOINTS.impressions, ['impression'], rangeQuery),
     ]);
 
+    if (allRejected([conversionResult, payoutResult, revenueResult, profitResult, clicksResult, eventsResult, impressionsResult])) {
+      throw new Error('Unable to load live range metrics. Verify token, partners_Id, and API connectivity.');
+    }
+
     return {
       clicks: clicksResult.status === 'fulfilled' ? clicksResult.value : 0,
       conversions: conversionResult.status === 'fulfilled' ? conversionResult.value : 0,
@@ -230,6 +250,11 @@ export const dashboardService = {
   },
 
   async overview(): Promise<DashboardOverview> {
+    const token = readAuthToken();
+    if (!token) {
+      throw new Error('Live dashboard requires a saved bearer token. Add it in Settings and refresh.');
+    }
+
     const [contactsResult, dealsResult, leadsResult, activitiesResult, conversionsResult, payoutResult, revenueResult, profitResult, clicksResult, eventsResult, impressionsResult] = await Promise.allSettled([
       fetchLiveContacts(),
       fetchLiveDeals(),
@@ -243,6 +268,13 @@ export const dashboardService = {
       requestMetricWithFallback(METRIC_ENDPOINTS.events, ['event']),
       requestMetricWithFallback(METRIC_ENDPOINTS.impressions, ['impression']),
     ]);
+
+    const primaryListResults: PromiseSettledResult<unknown>[] = [contactsResult, dealsResult, leadsResult, activitiesResult];
+    const summaryMetricResults: PromiseSettledResult<unknown>[] = [conversionsResult, payoutResult, revenueResult, profitResult, clicksResult, eventsResult, impressionsResult];
+
+    if (allRejected(primaryListResults) && allRejected(summaryMetricResults)) {
+      throw new Error('Unable to load live dashboard data. Verify token, partners_Id, and API connectivity.');
+    }
 
     const contacts = contactsResult.status === 'fulfilled' ? contactsResult.value : [];
     const deals = dealsResult.status === 'fulfilled' ? dealsResult.value : [];

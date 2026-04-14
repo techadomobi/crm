@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { repowireApi } from '../api/repowireApi';
 import { ApiError } from '../api/httpClient';
+import { asArray } from '../services/utils';
 
 type Tab = 'list' | 'create';
 
@@ -138,16 +139,23 @@ export default function OffersManagement({ initialTab = 'list' }: OffersManageme
     setListLoading(true);
     setListError(null);
     try {
-      const res = await repowireApi.offerList({
+      const query = {
         page,
         limit: 25,
         search: search.trim() || undefined,
         partners_Id: partnersId || undefined,
-      });
-      const list = Array.isArray(res)
-        ? res
-        : asRecord(res).data ?? asRecord(res).docs ?? asRecord(res).rows ?? asRecord(res).list ?? asRecord(res).result;
-      setRows(Array.isArray(list) ? list : []);
+      };
+
+      const allOffersResponse = await repowireApi.campaignList(query);
+      const allOffersRows = asArray<unknown>(allOffersResponse);
+      if (allOffersRows.length > 0) {
+        setRows(allOffersRows);
+        return;
+      }
+
+      const offerListResponse = await repowireApi.offerList(query);
+      const offerListRows = asArray<unknown>(offerListResponse);
+      setRows(offerListRows);
     } catch (e) {
       if (e instanceof ApiError) {
         setListError(`Could not load offers (${e.status}). Save token & partners_Id in Settings if required.`);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CalendarDays, Download, Loader2, RefreshCw, Search } from 'lucide-react';
 import { extractTabularData } from '../lib/swaggerTableData';
 import { PerformanceTab, reportingConsoleService, toCsv } from '../services/reportingConsole';
@@ -67,6 +67,20 @@ export default function PerformanceConsole() {
   };
 
   const visibleRows = useMemo(() => rows.slice(0, 300), [rows]);
+
+  useEffect(() => {
+    void run();
+    // Automatically keep list in sync with active tab and date filters.
+  }, [tab, startDate, endDate]);
+
+  useEffect(() => {
+    const onSessionUpdated = () => {
+      void run();
+    };
+
+    window.addEventListener('repowire-session-updated', onSessionUpdated as EventListener);
+    return () => window.removeEventListener('repowire-session-updated', onSessionUpdated as EventListener);
+  }, [tab, startDate, endDate, search]);
 
   return (
     <div className="space-y-5 animate-fade-in">

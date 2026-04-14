@@ -56,12 +56,67 @@ const buildQuery = (query: ConsoleQuery) => ({
   searchBy: query.searchBy?.trim() || undefined,
 });
 
+const readPartnersId = () =>
+  (localStorage.getItem('repowire_partners_id')
+    ?? localStorage.getItem('repowire_partners_Id')
+    ?? localStorage.getItem('partners_Id')
+    ?? '').trim();
+
+const buildEndpointQuery = (endpoint: string, query: ConsoleQuery) => {
+  const partners_Id = query.partners_Id ?? (readPartnersId() || undefined);
+  const base = buildQuery({ ...query, partners_Id });
+
+  if (endpoint === '/report/AffilitesPerformanceReport') {
+    return {
+      partners_Id: base.partners_Id,
+      page: base.page,
+      startDate: base.startDate,
+      endDate: base.endDate,
+      search: base.search,
+    };
+  }
+
+  if (endpoint === '/report/publishersReport') {
+    return {
+      partners_Id: base.partners_Id,
+      publisherId: query.searchBy?.trim() || undefined,
+      page: base.page,
+      startDate: base.startDate,
+      endDate: base.endDate,
+      search: base.search,
+    };
+  }
+
+  if (endpoint === '/report/publisherReport') {
+    return {
+      partners_Id: base.partners_Id,
+      page: base.page,
+      startDate: base.startDate,
+      endDate: base.endDate,
+      search: base.search,
+    };
+  }
+
+  if (endpoint === '/report/advertiserPerformanceReport') {
+    return {
+      partners_Id: base.partners_Id,
+      advertiser_id: query.searchBy?.trim() || undefined,
+      page: base.page,
+      startDate: base.startDate,
+      endDate: base.endDate,
+      search: base.search,
+    };
+  }
+
+  return base;
+};
+
 const loadFromEndpoints = async (endpoints: string[], query: ConsoleQuery) => {
-  const requestQuery = buildQuery(query);
   let lastError: unknown = null;
 
   for (const endpoint of endpoints) {
     try {
+      const requestQuery = buildEndpointQuery(endpoint, query);
       const payload = await apiRequest(endpoint, {
         method: 'GET',
         query: requestQuery,

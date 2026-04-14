@@ -24,28 +24,46 @@ export const asArray = <T>(value: unknown): T[] => {
     return [];
   }
 
-  const obj = value as Record<string, unknown>;
-
-  // Handle common API envelope keys first, and recurse if the value is nested.
   const keys = ['data', 'result', 'rows', 'items', 'list', 'records', 'docs', 'payload'];
-  for (const key of keys) {
-    const row = obj[key];
-    if (Array.isArray(row)) {
-      return row as T[];
+  const queue: Array<{ node: unknown; depth: number }> = [{ node: value, depth: 0 }];
+  const visited = new Set<unknown>();
+  let firstEmptyArray: T[] | null = null;
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+    if (current.depth > 6) continue;
+    if (visited.has(current.node)) continue;
+    visited.add(current.node);
+
+    if (Array.isArray(current.node)) {
+      if (current.node.length > 0) return current.node as T[];
+      if (!firstEmptyArray) firstEmptyArray = current.node as T[];
+      continue;
     }
-    if (row && typeof row === 'object') {
-      const nested = asArray<T>(row);
-      if (nested.length > 0) {
-        return nested;
+
+    if (!current.node || typeof current.node !== 'object') continue;
+    const obj = current.node as Record<string, unknown>;
+
+    for (const key of keys) {
+      const nested = obj[key];
+      if (Array.isArray(nested)) {
+        if (nested.length > 0) return nested as T[];
+        if (!firstEmptyArray) firstEmptyArray = nested as T[];
+      } else if (nested && typeof nested === 'object') {
+        queue.push({ node: nested, depth: current.depth + 1 });
+      }
+    }
+
+    for (const nested of Object.values(obj)) {
+      if (Array.isArray(nested)) {
+        if (nested.length > 0) return nested as T[];
+        if (!firstEmptyArray) firstEmptyArray = nested as T[];
+      } else if (nested && typeof nested === 'object') {
+        queue.push({ node: nested, depth: current.depth + 1 });
       }
     }
   }
 
-  // Some endpoints wrap arrays in a single top-level key with arbitrary naming.
-  const entries = Object.values(obj);
-  if (entries.length === 1 && entries[0] && typeof entries[0] === 'object') {
-    return asArray<T>(entries[0]);
-  }
-
-  return [];
+  return firstEmptyArray ?? [];
 };

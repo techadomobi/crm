@@ -171,18 +171,24 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
   const liveSummary = data.liveSummary;
 
   const rangeRevenueTotal = rangeSummary?.revenue ?? liveSummary?.revenue ?? data.openDealsValue;
+  const rangeClicksTotal = rangeSummary?.clicks ?? liveSummary?.clicks ?? rangeMetrics?.clicks ?? 0;
   const liveRangeChart = rangeMetrics?.chart ?? [];
+  const chartMetric = rangeMetrics?.chartMetric ?? 'revenue';
   const revenueSeriesCandidate = hasVisibleVariation(liveRangeChart)
     ? liveRangeChart
     : buildRangeFallbackSeries(
         range,
-        rangeRevenueTotal > 0 ? rangeRevenueTotal : fallbackRevenueData.reduce((sum, point) => sum + point.value, 0)
+        chartMetric === 'clicks'
+          ? rangeClicksTotal
+          : (rangeRevenueTotal > 0 ? rangeRevenueTotal : fallbackRevenueData.reduce((sum, point) => sum + point.value, 0))
       );
   const revenueData = revenueSeriesCandidate;
 
   const pipelineData = rangeMetrics?.pipeline.length
     ? rangeMetrics.pipeline
     : data.pipelineStages;
+
+  const chartTotalLabel = chartMetric === 'clicks' ? 'Clicks' : 'Revenue';
 
   const kpis = (() => {
     const conversions = rangeSummary?.conversions ?? liveSummary?.conversions ?? rangeMetrics?.conversions ?? data.pipelineStages.reduce((sum, stage) => sum + stage.count, 0);
@@ -273,7 +279,7 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
           title="Performance Trend"
           subtitle={`${rangeSubtitle[range]} based on live API data`}
           trendLabel="Real-time"
-          totalLabel="Revenue"
+          totalLabel={chartTotalLabel}
         />
 
         <PipelineChart data={pipelineData} />

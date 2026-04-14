@@ -41,19 +41,41 @@ const toDateKey = (value: unknown): string => {
 const extractList = (input: unknown): unknown[] => {
   if (Array.isArray(input)) return input;
 
-  const obj = asObject(input);
-  if (!obj) return [];
+  const root = asObject(input);
+  if (!root) return [];
 
-  for (const key of LIST_KEYS) {
-    if (Array.isArray(obj[key])) return obj[key] as unknown[];
-  }
+  const queue: Array<{ node: unknown; depth: number }> = [{ node: root, depth: 0 }];
+  const visited = new Set<unknown>();
 
-  for (const value of Object.values(obj)) {
-    if (Array.isArray(value)) return value;
-    const nested = asObject(value);
-    if (!nested) continue;
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+    if (current.depth > 5) continue;
+    if (visited.has(current.node)) continue;
+    visited.add(current.node);
+
+    if (Array.isArray(current.node)) {
+      if (current.node.length > 0) return current.node;
+      continue;
+    }
+
+    const record = asObject(current.node);
+    if (!record) continue;
+
     for (const key of LIST_KEYS) {
-      if (Array.isArray(nested[key])) return nested[key] as unknown[];
+      const candidate = record[key];
+      if (Array.isArray(candidate) && candidate.length > 0) {
+        return candidate;
+      }
+    }
+
+    for (const value of Object.values(record)) {
+      if (Array.isArray(value) && value.length > 0) {
+        return value;
+      }
+      if (value && typeof value === 'object') {
+        queue.push({ node: value, depth: current.depth + 1 });
+      }
     }
   }
 
