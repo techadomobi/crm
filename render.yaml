@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: repowire-crm-proxy
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CRM_API_BASE_URL
+        value: https://apiv2.offersmeta.in
+      - key: CRM_AUTH_MODE
+        value: forward-client
+      - key: FRONTEND_ORIGIN
+        value: https://your-vercel-domain.vercel.app
