@@ -144,18 +144,52 @@ const withPartnersId = (query: Record<string, string | number>) => {
   return { ...query, partners_Id: partnersId };
 };
 
+const buildQueryVariants = (baseQuery: Record<string, string | number>) => {
+  const partnersId = getPartnersId();
+  const variants: Array<Record<string, string | number>> = [
+    withPartnersId(baseQuery),
+    baseQuery,
+  ];
+
+  if (partnersId) {
+    variants.push({ ...baseQuery, partners_Id: partnersId });
+    variants.push({ ...baseQuery, partnersId });
+    variants.push({ ...baseQuery, partnerId: partnersId });
+  }
+
+  const unique = new Map<string, Record<string, string | number>>();
+  variants.forEach((query) => unique.set(JSON.stringify(query), query));
+  return [...unique.values()];
+};
+
+const requestListWithVariants = async (path: string, baseQuery: Record<string, string | number>) => {
+  const variants = buildQueryVariants(baseQuery);
+  let lastError: unknown = null;
+  let emptySuccess = false;
+
+  for (const query of variants) {
+    try {
+      const response = await apiRequest(path, { method: 'GET', query });
+      const rows = extractList(response);
+      if (rows.length > 0) return rows;
+      emptySuccess = true;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (emptySuccess) return [];
+  throw lastError instanceof Error ? lastError : new Error(`Failed to load list from ${path}`);
+};
+
 export async function fetchLiveContacts(): Promise<Contact[]> {
   const [publishersRes, advertisersRes] = await Promise.allSettled([
-    apiRequest('/publicher/publisherList', { method: 'GET', query: withPartnersId({ page: 1, limit: 200 }) }),
-    apiRequest('/advertiser/advertiserList', { method: 'GET', query: withPartnersId({ page: 1, limit: 200 }) }),
+    requestListWithVariants('/publicher/publisherList', { page: 1, limit: 200 }),
+    requestListWithVariants('/advertiser/advertiserList', { page: 1, limit: 200 }),
   ]);
 
   const publishersRaw = publishersRes.status === 'fulfilled' ? publishersRes.value : [];
   const advertisersRaw = advertisersRes.status === 'fulfilled' ? advertisersRes.value : [];
-
-  if (publishersRes.status === 'rejected' && advertisersRes.status === 'rejected') {
-    throw publishersRes.reason;
-  }
 
   const publishers = extractList(publishersRaw).map((item, index) => {
     const row = asObject(item) ?? {};
@@ -189,7 +223,54 @@ export async function fetchLiveContacts(): Promise<Contact[]> {
     } as Contact;
   });
 
-  return [...publishers, ...advertisers];
+  if (publishers.length > 0 || advertisers.length > 0) {
+    return [...publishers, ...advertisers];
+  }
+
+  const [managersRes, partnersRes] = await Promise.allSettled([
+    requestListWithVariants('/manager/managerList', { page: 1, limit: 200 }),
+    requestListWithVariants('/admin/partnersList', { page: 1, limit: 200 }),
+  ]);
+
+  const managers = (managersRes.status === 'fulfilled' ? managersRes.value : []).map((item, index) => {
+    const row = asObject(item) ?? {};
+    return {
+      id: extractId(row, `mgr-${index}`),
+      name: extractName(row),
+      email: toString(row.email) || 'N/A',
+      phone: toString(row.mobileNumber) || toString(row.number) || 'N/A',
+      company: toString(row.companyName) || toString(row.company) || 'Manager',
+      status: statusFromAny(row.status),
+      value: toNumber(row.totalRevenue) ?? toNumber(row.totalPayout) ?? 0,
+      lastContact: toDateKey(parseRecentDate(row)),
+      avatar: (extractName(row).match(/\b\w/g)?.slice(0, 2).join('') ?? 'MG').toUpperCase(),
+      tags: ['manager'],
+    } as Contact;
+  });
+
+  const partners = (partnersRes.status === 'fulfilled' ? partnersRes.value : []).map((item, index) => {
+    const row = asObject(item) ?? {};
+    return {
+      id: extractId(row, `partner-${index}`),
+      name: extractName(row),
+      email: toString(row.email) || 'N/A',
+      phone: toString(row.mobileNumber) || toString(row.number) || 'N/A',
+      company: toString(row.companyName) || toString(row.company) || 'Partner',
+      status: statusFromAny(row.status),
+      value: toNumber(row.totalRevenue) ?? toNumber(row.totalPayout) ?? 0,
+      lastContact: toDateKey(parseRecentDate(row)),
+      avatar: (extractName(row).match(/\b\w/g)?.slice(0, 2).join('') ?? 'PT').toUpperCase(),
+      tags: ['partner'],
+    } as Contact;
+  });
+
+  const fallbackRows = [...managers, ...partners];
+  if (fallbackRows.length > 0) {
+    return fallbackRows;
+  }
+
+  const primaryError = publishersRes.status === 'rejected' ? publishersRes.reason : advertisersRes.status === 'rejected' ? advertisersRes.reason : null;
+  throw primaryError instanceof Error ? primaryError : new Error('Failed to load live contacts from all available endpoints.');
 }
 
 export async function fetchLiveDeals(): Promise<Deal[]> {

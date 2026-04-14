@@ -34,8 +34,9 @@ export default function Contacts() {
       const rows = await fetchLiveContacts();
       setContactList(rows);
       setLastUpdatedAt(new Date());
-    } catch {
-      setLoadError('Failed to load live contacts from OffersMeta API.');
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unknown error';
+      setLoadError(`Failed to load live contacts from OffersMeta API. ${reason}`);
       setContactList([]);
     } finally {
       setLoading(false);
