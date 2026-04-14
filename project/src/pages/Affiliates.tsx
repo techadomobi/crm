@@ -1,17 +1,14 @@
 import { useState } from 'react';
-import { Search, Plus, MoreVertical } from 'lucide-react';
+import { Loader2, MoreVertical, RefreshCw, Search } from 'lucide-react';
 import { useAffiliates } from '../hooks/useAffiliates';
 
-type AffiliateType = 'publishers' | 'advertisers';
-
 export default function Affiliates() {
-  const [type, setType] = useState<AffiliateType>('publishers');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [itemsPerPage, setItemsPerPage] = useState(50);
 
-  const { data, isLoading, isError, error } = useAffiliates({
-    type,
+  const { data, isLoading, isError, error, refetch } = useAffiliates({
+    type: 'publishers',
     page,
     limit: itemsPerPage,
     search,
@@ -22,104 +19,70 @@ export default function Affiliates() {
     setPage(1);
   };
 
-  const typeLabel = type === 'publishers' ? 'Publishers' : 'Advertisers';
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-black tracking-tight text-slate-900">{typeLabel}</h1>
-            <p className="mt-1 text-sm text-slate-500">Manage your {typeLabel.toLowerCase()} and view their details, status, and activity.</p>
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-100 bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
+              <RefreshCw size={14} />
+              Live publisher list
+            </div>
+            <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-900">Publishers</h1>
+            <p className="mt-1 text-sm text-slate-500">Live data loaded directly from the publisher API and rendered in this table.</p>
           </div>
-          <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors">
-            <Plus size={18} />
-            Add {typeLabel === 'Publishers' ? 'Publisher' : 'Advertiser'}
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+          >
+            <RefreshCw size={18} />
+            Refresh
           </button>
         </div>
       </section>
 
-      {/* Filters and Controls */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="flex gap-2 w-full md:w-auto">
-            <button
-              onClick={() => {
-                setType('publishers');
-                setPage(1);
-              }}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                type === 'publishers'
-                  ? 'bg-blue-600 text-white'
-                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              Publishers
-            </button>
-            <button
-              onClick={() => {
-                setType('advertisers');
-                setPage(1);
-              }}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                type === 'advertisers'
-                  ? 'bg-blue-600 text-white'
-                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              Advertisers
-            </button>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="relative w-full md:max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search publishers by Name, ID, Email..."
+              value={search}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
           </div>
-
-          <div className="flex gap-3 w-full md:w-auto">
-            <div className="relative flex-1 md:flex-none">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
-              <input
-                type="text"
-                placeholder={`Search ${typeLabel.toLowerCase()}...`}
-                value={search}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <select
-              value={itemsPerPage}
-              onChange={(e) => {
-                setItemsPerPage(Number(e.target.value));
-                setPage(1);
-              }}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-              <option value={100}>100 / page</option>
-            </select>
-          </div>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => {
+              setItemsPerPage(Number(e.target.value));
+              setPage(1);
+            }}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value={25}>25 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={100}>100 / page</option>
+          </select>
         </div>
       </section>
 
-      {/* Loading State */}
       {isLoading && (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
-          <div className="inline-flex items-center justify-center space-x-2">
-            <div className="h-2 w-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-            <div className="h-2 w-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '150ms' }}></div>
-            <div className="h-2 w-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '300ms' }}></div>
-          </div>
-          <p className="mt-3 text-sm text-slate-500">Loading {typeLabel.toLowerCase()}...</p>
+          <Loader2 size={18} className="mx-auto mb-2 animate-spin text-blue-600" />
+          <p className="mt-3 text-sm text-slate-500">Loading publishers...</p>
         </div>
       )}
 
-      {/* Error State */}
       {isError && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-          <p className="text-sm font-semibold text-red-900">Failed to load {typeLabel.toLowerCase()}</p>
+          <p className="text-sm font-semibold text-red-900">Failed to load publishers</p>
           <p className="mt-1 text-sm text-red-700">{error?.message ?? 'Unknown error occurred'}</p>
         </div>
       )}
 
-      {/* Data Table */}
       {!isLoading && !isError && (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div className="overflow-x-auto">
@@ -204,8 +167,8 @@ export default function Affiliates() {
                         <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                           <span className="text-xl">📋</span>
                         </div>
-                        <p className="text-sm font-semibold text-slate-900">No {typeLabel.toLowerCase()} found</p>
-                        <p className="text-xs text-slate-500 mt-1">Try adjusting your search criteria or add a new {type === 'publishers' ? 'publisher' : 'advertiser'}.</p>
+                        <p className="text-sm font-semibold text-slate-900">No publishers found</p>
+                        <p className="text-xs text-slate-500 mt-1">Try adjusting your search criteria or refresh the live API data.</p>
                       </div>
                     </td>
                   </tr>
