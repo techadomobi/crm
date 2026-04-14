@@ -1,5 +1,4 @@
 import type { DashboardOverview } from '../types/crm';
-import { repowireApi } from '../api/repowireApi';
 import { apiRequest } from '../api/httpClient';
 import { fetchLiveActivities, fetchLiveContacts, fetchLiveDeals } from '../api/liveDataAdapters';
 import { leadsService } from './leads';
@@ -74,6 +73,61 @@ const readPartnersId = () =>
     ?? localStorage.getItem('repowire_partners_Id')
     ?? localStorage.getItem('partners_Id')
     ?? '').trim();
+
+const buildMetricQueryVariants = (base: Record<string, string>) => {
+  const partnersId = readPartnersId();
+  const variants: Array<Record<string, string>> = [base];
+
+  if (partnersId) {
+    variants.push({ ...base, partners_Id: partnersId });
+    variants.push({ ...base, partnersId });
+    variants.push({ ...base, partnerId: partnersId });
+  }
+
+  const unique = new Map<string, Record<string, string>>();
+  variants.forEach((query) => unique.set(JSON.stringify(query), query));
+  return [...unique.values()];
+};
+
+const requestMetricWithFallback = async (
+  endpoints: string[],
+  preferredKeys: string[],
+  queryBase?: Record<string, string>
+) => {
+  const variants = buildMetricQueryVariants(queryBase ?? {});
+  let lastError: unknown = null;
+
+  for (const endpoint of endpoints) {
+    for (const query of variants) {
+      try {
+        const response = await apiRequest(endpoint, {
+          method: 'GET',
+          query: Object.keys(query).length > 0 ? query : undefined,
+        });
+        const metric = extractMetric(response, preferredKeys);
+        return metric;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  return 0;
+};
+
+const METRIC_ENDPOINTS = {
+  clicks: ['/tracking/totalClick', '/manager/totalClick', '/manager/advertiserTotalClick'],
+  conversions: ['/conversion/totalConversion', '/manager/totalConversion', '/manager/advertiserTotalConversion'],
+  events: ['/conversion/totalEvent', '/manager/totalEvent', '/manager/advertiserTotalEvent', '/advertiser/advertiserTotalEvent', '/publicher/PublisherTotalEvent'],
+  impressions: ['/impression/totalImpression', '/advertiser/advertiserTotalImpression', '/publicher/PublisherTotalImpression'],
+  payout: ['/conversion/totalPayout', '/manager/totalPayout', '/manager/advertiserTotalPayout'],
+  revenue: ['/conversion/totalRevenue', '/manager/totalRevenue', '/manager/advertiserTotalRevenue'],
+  profit: ['/conversion/totalProfit', '/manager/totalProfit'],
+} as const;
 
 const rangeDates = (range: RangeKey) => {
   const now = new Date();
@@ -151,56 +205,56 @@ const buildRevenueSeries = (deals: Array<{ value: number; createdAt: string }>) 
 
 export const dashboardService = {
   async rangeSummary(range: RangeKey) {
-    const partnersId = readPartnersId();
     const { startDate, endDate } = rangeDates(range);
     const rangeQuery = { startDate, endDate };
 
     const [conversionResult, payoutResult, revenueResult, profitResult, clicksResult, eventsResult, impressionsResult] = await Promise.allSettled([
-      apiRequest('/conversion/totalConversion', { method: 'GET', query: rangeQuery }),
-      apiRequest('/conversion/totalPayout', { method: 'GET', query: rangeQuery }),
-      apiRequest('/conversion/totalRevenue', { method: 'GET', query: rangeQuery }),
-      apiRequest('/conversion/totalProfit', { method: 'GET', query: rangeQuery }),
-      apiRequest('/tracking/totalClick', { method: 'GET', query: partnersId ? { ...rangeQuery, partners_Id: partnersId } : rangeQuery }),
-      apiRequest('/conversion/totalEvent', { method: 'GET', query: rangeQuery }),
-      apiRequest('/impression/totalImpression', { method: 'GET', query: partnersId ? { partners_Id: partnersId, startDate, endDate } : { startDate, endDate } }),
+      requestMetricWithFallback(METRIC_ENDPOINTS.conversions, ['conversion'], rangeQuery),
+      requestMetricWithFallback(METRIC_ENDPOINTS.payout, ['payout'], rangeQuery),
+      requestMetricWithFallback(METRIC_ENDPOINTS.revenue, ['revenue'], rangeQuery),
+      requestMetricWithFallback(METRIC_ENDPOINTS.profit, ['profit'], rangeQuery),
+      requestMetricWithFallback(METRIC_ENDPOINTS.clicks, ['click'], rangeQuery),
+      requestMetricWithFallback(METRIC_ENDPOINTS.events, ['event'], rangeQuery),
+      requestMetricWithFallback(METRIC_ENDPOINTS.impressions, ['impression'], rangeQuery),
     ]);
 
     return {
-      clicks: clicksResult.status === 'fulfilled' ? extractMetric(clicksResult.value, ['click']) : 0,
-      conversions: conversionResult.status === 'fulfilled' ? extractMetric(conversionResult.value, ['conversion']) : 0,
-      impressions: impressionsResult.status === 'fulfilled' ? extractMetric(impressionsResult.value, ['impression']) : 0,
-      events: eventsResult.status === 'fulfilled' ? extractMetric(eventsResult.value, ['event']) : 0,
-      revenue: revenueResult.status === 'fulfilled' ? extractMetric(revenueResult.value, ['revenue']) : 0,
-      payout: payoutResult.status === 'fulfilled' ? extractMetric(payoutResult.value, ['payout']) : 0,
-      profit: profitResult.status === 'fulfilled' ? extractMetric(profitResult.value, ['profit']) : 0,
+      clicks: clicksResult.status === 'fulfilled' ? clicksResult.value : 0,
+      conversions: conversionResult.status === 'fulfilled' ? conversionResult.value : 0,
+      impressions: impressionsResult.status === 'fulfilled' ? impressionsResult.value : 0,
+      events: eventsResult.status === 'fulfilled' ? eventsResult.value : 0,
+      revenue: revenueResult.status === 'fulfilled' ? revenueResult.value : 0,
+      payout: payoutResult.status === 'fulfilled' ? payoutResult.value : 0,
+      profit: profitResult.status === 'fulfilled' ? profitResult.value : 0,
     };
   },
 
   async overview(): Promise<DashboardOverview> {
-    const partnersId = readPartnersId();
-    const [contactsResult, dealsResult, leadsResult, activitiesResult, summaryResult, clicksResult, eventsResult, impressionsResult] = await Promise.allSettled([
+    const [contactsResult, dealsResult, leadsResult, activitiesResult, conversionsResult, payoutResult, revenueResult, profitResult, clicksResult, eventsResult, impressionsResult] = await Promise.allSettled([
       fetchLiveContacts(),
       fetchLiveDeals(),
       leadsService.listPipeline({ page: 1, limit: 100 }),
       fetchLiveActivities(),
-      repowireApi.conversionSummary(),
-      apiRequest('/tracking/totalClick', { method: 'GET', query: partnersId ? { partners_Id: partnersId } : undefined }),
-      apiRequest('/conversion/totalEvent', { method: 'GET' }),
-      apiRequest('/impression/totalImpression', { method: 'GET', query: partnersId ? { partners_Id: partnersId } : undefined }),
+      requestMetricWithFallback(METRIC_ENDPOINTS.conversions, ['conversion']),
+      requestMetricWithFallback(METRIC_ENDPOINTS.payout, ['payout']),
+      requestMetricWithFallback(METRIC_ENDPOINTS.revenue, ['revenue']),
+      requestMetricWithFallback(METRIC_ENDPOINTS.profit, ['profit']),
+      requestMetricWithFallback(METRIC_ENDPOINTS.clicks, ['click']),
+      requestMetricWithFallback(METRIC_ENDPOINTS.events, ['event']),
+      requestMetricWithFallback(METRIC_ENDPOINTS.impressions, ['impression']),
     ]);
 
     const contacts = contactsResult.status === 'fulfilled' ? contactsResult.value : [];
     const deals = dealsResult.status === 'fulfilled' ? dealsResult.value : [];
     const leads = leadsResult.status === 'fulfilled' ? leadsResult.value : [];
     const activities = activitiesResult.status === 'fulfilled' ? activitiesResult.value : [];
-    const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : null;
-    const liveClicks = clicksResult.status === 'fulfilled' ? extractMetric(clicksResult.value, ['click']) : 0;
-    const liveEvents = eventsResult.status === 'fulfilled' ? extractMetric(eventsResult.value, ['event']) : 0;
-    const liveImpressions = impressionsResult.status === 'fulfilled' ? extractMetric(impressionsResult.value, ['impression']) : 0;
-    const liveConversions = summary ? extractMetric(summary.totalConversion, ['conversion']) : 0;
-    const liveRevenue = summary ? extractMetric(summary.totalRevenue, ['revenue']) : 0;
-    const livePayout = summary ? extractMetric(summary.totalPayout, ['payout']) : 0;
-    const liveProfit = summary ? extractMetric(summary.totalProfit, ['profit']) : 0;
+    const liveClicks = clicksResult.status === 'fulfilled' ? clicksResult.value : 0;
+    const liveEvents = eventsResult.status === 'fulfilled' ? eventsResult.value : 0;
+    const liveImpressions = impressionsResult.status === 'fulfilled' ? impressionsResult.value : 0;
+    const liveConversions = conversionsResult.status === 'fulfilled' ? conversionsResult.value : 0;
+    const liveRevenue = revenueResult.status === 'fulfilled' ? revenueResult.value : 0;
+    const livePayout = payoutResult.status === 'fulfilled' ? payoutResult.value : 0;
+    const liveProfit = profitResult.status === 'fulfilled' ? profitResult.value : 0;
 
     const currentMonth = monthKey(new Date());
     const leadsThisMonth = leads.filter((lead) => {
