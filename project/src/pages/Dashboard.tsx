@@ -1,7 +1,9 @@
-﻿import { DollarSign, Users, Target, CalendarClock, CheckCircle, BookOpenText } from 'lucide-react';
-import StatsCard from '../components/StatsCard';
+import { useState } from 'react';
+import { Activity, BookOpenText, CheckCircle, CircleDollarSign, Eye, MousePointerClick, Percent, Sparkles } from 'lucide-react';
 import RevenueChart from '../components/RevenueChart';
+import RoleDashboardsPanel from '../components/RoleDashboardsPanel';
 import { useDashboardOverview } from '../hooks/useDashboardOverview';
+import { RangeKey, useDashboardRangeMetrics } from '../hooks/useDashboardRangeMetrics';
 
 const formatCurrency = (value: number) => {
   return `$${value.toLocaleString()}`;
@@ -47,13 +49,52 @@ function PipelineChart({ data }: { data: Array<{ stage: string; count: number }>
   );
 }
 
+function KpiCard({
+  label,
+  value,
+  trend,
+  icon,
+}: {
+  label: string;
+  value: string;
+  trend: string;
+  icon: React.ReactNode;
+}) {
+  const positive = trend.startsWith('+');
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600">{icon}</span>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${positive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+          {trend}
+        </span>
+      </div>
+      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-2 text-[38px] leading-none font-extrabold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
 interface DashboardProps {
   displayName: string;
   displayEmail: string;
 }
 
+const rangeSubtitle: Record<RangeKey, string> = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  lastWeek: 'Last 7 days',
+  thisMonth: 'This month',
+  lastMonth: 'Last month',
+};
+
 export default function Dashboard({ displayName, displayEmail }: DashboardProps) {
+  const [range, setRange] = useState<RangeKey>('today');
   const { data, isLoading, isError, error } = useDashboardOverview();
+  const { rangeMetrics, rangeLoading, rangeError } = useDashboardRangeMetrics(range, {
+    liveDeals: data?.liveDeals,
+    liveActivities: data?.liveActivities,
+  });
 
   if (isLoading) {
     return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Loading live dashboard data...</div>;
@@ -67,22 +108,73 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
     );
   }
 
-  const revenueData = data.revenueSeries.map((point) => ({
+  const fallbackRevenueData = data.revenueSeries.map((point) => ({
     month: point.label,
     value: point.value,
   }));
 
+  const revenueData = rangeMetrics?.chart.length
+    ? rangeMetrics.chart
+    : fallbackRevenueData;
+
+  const pipelineData = rangeMetrics?.pipeline.length
+    ? rangeMetrics.pipeline
+    : data.pipelineStages;
+
+  const kpis = (() => {
+    const conversions = rangeMetrics?.conversions ?? data.pipelineStages.reduce((sum, stage) => sum + stage.count, 0);
+    const clicks = rangeMetrics?.clicks ?? 0;
+    const impressions = rangeMetrics?.impressions ?? 0;
+    const cr = clicks > 0 ? `${((conversions / clicks) * 100).toFixed(2)}%` : '0.00%';
+    const events = rangeMetrics?.events ?? data.activitiesDueToday;
+    const revenue = rangeMetrics?.revenue ?? Math.max(data.openDealsValue, 0);
+    const payout = rangeMetrics?.payout ?? 0;
+    const profit = rangeMetrics?.profit ?? (revenue - payout);
+
+    return [
+      { label: 'Clicks', value: String(clicks), trend: 'Live', icon: <MousePointerClick size={18} /> },
+      { label: 'Conversions', value: String(conversions), trend: 'Live', icon: <Activity size={18} /> },
+      { label: 'CR', value: cr, trend: 'Live', icon: <Percent size={18} /> },
+      { label: 'Impressions', value: String(impressions), trend: 'Live', icon: <Eye size={18} /> },
+      { label: 'Events', value: String(events), trend: 'Live', icon: <Sparkles size={18} /> },
+      { label: 'Revenue', value: formatCurrency(revenue), trend: 'Live', icon: <CircleDollarSign size={18} /> },
+      { label: 'Payout', value: formatCurrency(payout), trend: 'Live', icon: <CircleDollarSign size={18} /> },
+      { label: 'Profit', value: formatCurrency(profit), trend: 'Live', icon: <CircleDollarSign size={18} /> },
+    ];
+  })();
+
   return (
-    <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Signed in as</p>
-          <h2 className="text-2xl font-bold text-slate-900">{displayName || displayEmail.split('@')[0]}</h2>
-          <p className="text-sm text-slate-500">Your live CRM summary and graphs are shown below.</p>
+    <div className="space-y-6 animate-fade-in">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-4xl font-black tracking-tight text-slate-900">Performance Dashboard</h2>
+            <p className="mt-1 text-sm text-slate-500">Welcome {displayName || displayEmail.split('@')[0]}. Live data is synced every 30 seconds.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['today', 'Today'],
+              ['yesterday', 'Yesterday'],
+              ['lastWeek', 'Last Week'],
+              ['thisMonth', 'This Month'],
+              ['lastMonth', 'Last Month'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setRange(value as typeof range)}
+                className={`rounded-xl border px-4 py-2 text-sm font-semibold transition-colors ${
+                  range === value ? 'border-cyan-600 bg-cyan-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
-      <div className="rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50 p-5">
+      <div className="rounded-3xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="rounded-full bg-emerald-200 p-2.5 text-emerald-700">
@@ -90,7 +182,7 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
             </div>
             <div>
               <p className="text-sm font-bold text-emerald-900">OffersMeta v2 Integration Live</p>
-              <p className="mt-0.5 text-xs text-emerald-700">All CRM modules connected to production API. Full feature set available.</p>
+              <p className="mt-0.5 text-xs text-emerald-700">CRM modules are connected to live endpoints from the API catalog.</p>
             </div>
           </div>
           <a href="/api/docs" className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3 py-2 text-xs font-semibold text-white transition-colors whitespace-nowrap">
@@ -99,23 +191,29 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
           </a>
         </div>
       </div>
+
+      {(rangeLoading || rangeError) && (
+        <div className={`rounded-xl border px-4 py-2.5 text-sm ${rangeError ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-cyan-200 bg-cyan-50 text-cyan-900'}`}>
+          {rangeLoading ? 'Loading real data for selected range...' : rangeError}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatsCard label="Total Contacts" value={String(data.totalContacts)} change={0} changeLabel="Live from CRM API" icon={<Users size={18} />} color="blue" />
-        <StatsCard label="Open Deals Value" value={formatCurrency(data.openDealsValue)} change={0} changeLabel="Live from CRM API" icon={<DollarSign size={18} />} color="green" />
-        <StatsCard label="Leads This Month" value={String(data.leadsThisMonth)} change={0} changeLabel="Live from CRM API" icon={<Target size={18} />} color="amber" />
-        <StatsCard label="Activities Due Today" value={String(data.activitiesDueToday)} change={0} changeLabel="Live from CRM API" icon={<CalendarClock size={18} />} color="rose" />
+        {kpis.map((kpi) => (
+          <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} trend={kpi.trend} icon={kpi.icon} />
+        ))}
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <RevenueChart
           data={revenueData}
-          title="Revenue Trend (Live)"
-          subtitle="Last 7 days from API data"
+          title="Performance Trend"
+          subtitle={`${rangeSubtitle[range]} based on live API data`}
           trendLabel="Real-time"
-          totalLabel="Revenue this week"
+          totalLabel="Revenue"
         />
 
-        <PipelineChart data={data.pipelineStages} />
+        <PipelineChart data={pipelineData} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -158,6 +256,9 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
           </ul>
         </section>
       </div>
+
+      <RoleDashboardsPanel />
     </div>
   );
 }
+

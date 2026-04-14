@@ -1,20 +1,20 @@
-import { apiClient } from '../lib/apiClient';
-import type { ApiEnvelope } from '../types/api';
 import type { ContactRecord } from '../types/crm';
-import { asArray, unwrap } from './utils';
+import { fetchLiveContacts } from '../api/liveDataAdapters';
 
 export const contactsService = {
   async list(params?: Record<string, string | number>) {
-    const response = await apiClient.get<ApiEnvelope<unknown>>('/contacts', { params });
-    const rows = asArray<Record<string, unknown>>(unwrap(response.data));
-    return rows.map((row, index) => ({
-      id: String(row._id || row.id || row.publisherId || `contact-${index}`),
-      name: String(row.firstName || row.name || row.companyName || 'Unknown'),
-      email: String(row.email || ''),
-      phone: String(row.mobileNumber || row.phone || ''),
-      companyName: String(row.companyName || 'Unknown'),
-      status: String(row.status || 'unknown'),
-      createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
+    const rows = await fetchLiveContacts();
+    const mapped = rows.map((row, index) => ({
+      id: row.id || `contact-${index}`,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      companyName: row.company,
+      status: row.status,
+      createdAt: row.lastContact,
     })) as ContactRecord[];
+
+    const limit = Number(params?.limit ?? 0);
+    return Number.isFinite(limit) && limit > 0 ? mapped.slice(0, limit) : mapped;
   },
 };

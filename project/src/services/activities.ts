@@ -1,24 +1,25 @@
-import { apiClient } from '../lib/apiClient';
-import type { ApiEnvelope } from '../types/api';
 import type { ActivityRecord } from '../types/crm';
-import { asArray, unwrap } from './utils';
+import { fetchLiveActivities } from '../api/liveDataAdapters';
 
 export const activitiesService = {
   async list(params?: Record<string, string | number>) {
-    const response = await apiClient.get<ApiEnvelope<unknown>>('/activities', { params });
-    const rows = asArray<Record<string, unknown>>(unwrap(response.data));
-    return rows.map((row, index) => ({
-      id: String(row._id || row.id || row.conversionId || `activity-${index}`),
-      type: String(row.type || row.activityType || 'task'),
-      title: String(row.title || row.offerName || `Activity ${index + 1}`),
-      dueDate: typeof row.date === 'string' ? row.date : undefined,
-      status: String(row.status || row.conversionStatus || 'pending'),
-      owner: String(row.managerName || 'System'),
+    const rows = await fetchLiveActivities();
+    const mapped = rows.map((row, index) => ({
+      id: row.id || `activity-${index}`,
+      type: row.type,
+      title: row.title,
+      dueDate: row.date,
+      status: row.status,
+      owner: row.assignee,
     })) as ActivityRecord[];
+
+    const limit = Number(params?.limit ?? 0);
+    return Number.isFinite(limit) && limit > 0 ? mapped.slice(0, limit) : mapped;
   },
 
   async dueToday(params?: Record<string, string | number>) {
-    const response = await apiClient.get<ApiEnvelope<unknown>>('/activities/today', { params });
-    return asArray<Record<string, unknown>>(unwrap(response.data)).length;
+    const rows = await this.list(params);
+    const today = new Date().toISOString().slice(0, 10);
+    return rows.filter((row) => (row.dueDate ?? '').slice(0, 10) === today).length;
   },
 };

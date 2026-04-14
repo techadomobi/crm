@@ -39,6 +39,8 @@ export interface DashboardOverview {
   openDealsValue: number;
   leadsThisMonth: number;
   activitiesDueToday: number;
+  liveDeals: DealRecord[];
+  liveActivities: ActivityRecord[];
   recentContacts: ContactRecord[];
   dealPipeline: Array<{ stage: string; value: number }>;
   pipelineStages: Array<{ stage: string; count: number }>;

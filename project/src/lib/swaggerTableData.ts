@@ -1,6 +1,6 @@
 /** Pull a tabular slice from typical OffersMeta list payloads for the API Studio table view. */
 export function extractTabularData(data: unknown): { columns: string[]; rows: Record<string, unknown>[] } | null {
-  const asRows = (arr: unknown[]): Record<string, unknown>[] | null => {
+  const asRows = (arr: unknown[]): { columns: string[]; rows: Record<string, unknown>[] } | null => {
     const objects = arr.filter((r): r is Record<string, unknown> => r !== null && typeof r === 'object' && !Array.isArray(r));
     if (objects.length === 0) return null;
     const columns = Object.keys(objects[0]);

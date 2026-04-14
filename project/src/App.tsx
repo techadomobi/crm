@@ -5,12 +5,15 @@ import Dashboard from './pages/Dashboard';
 import Contacts from './pages/Contacts';
 import Deals from './pages/Deals';
 import Activities from './pages/Activities';
-import Reports from './pages/Reports.tsx';
+import ReportsWorkspace from './pages/ReportsWorkspace';
 import ApiDocs from './pages/ApiDocs';
 import ApiStudio from './pages/ApiStudio';
+import ApiHealth from './pages/ApiHealth.tsx';
 import OffersManagement from './pages/OffersManagement';
+import CampaignsList from './pages/CampaignsList';
+import CampaignModulesWorkspace from './pages/CampaignModulesWorkspace';
+import ApiModuleWorkbench from './pages/ApiModuleWorkbench';
 import Settings from './pages/Settings';
-import CrmModuleDetails from './pages/CrmModuleDetails';
 import AuthPortal from './pages/AuthPortal';
 import { NavPage } from './types';
 import { AdminLoginPayload, AuthAccountType, repowireApi, SignupPayload } from './api/repowireApi';
@@ -24,6 +27,18 @@ const USER_ROLE_KEY = 'repowire_user_role';
 const routeToPage: Record<string, NavPage> = {
   '/': 'dashboard',
   '/dashboard': 'dashboard',
+  '/dashboard/campaigns': 'campaigns',
+  '/dashboard/request-offers': 'manageCampaigns',
+  '/dashboard/affiliates': 'contacts',
+  '/dashboard/postback': 'postbackLogs',
+  '/dashboard/advertiser': 'advertisers',
+  '/dashboard/performance': 'reports',
+  '/dashboard/analytics': 'conversionReport',
+  '/dashboard/impressions': 'impressionReport',
+  '/dashboard/validation': 'additionalReports',
+  '/dashboard/manager': 'publishersManage',
+  '/dashboard/integrations': 'integration',
+  '/dashboard/settings': 'settings',
   '/contacts': 'contacts',
   '/deals': 'deals',
   '/activities': 'activities',
@@ -31,25 +46,141 @@ const routeToPage: Record<string, NavPage> = {
   '/settings': 'settings',
   '/api/docs': 'apiDocs',
   '/api/studio': 'apiStudio',
+  '/api/health': 'apiHealth',
+  '/campaigns': 'campaigns',
   '/campaigns/manage': 'manageCampaigns',
   '/campaigns/create': 'createCampaign',
+  '/reports/campaigns': 'campaignsReport',
+  '/reports/publishers': 'publishersReport',
+  '/reports/advertisers': 'advertisersReport',
+  '/reports/daily': 'dailyReport',
+  '/reports/goals': 'goalsReport',
+  '/reports/cohort': 'cohortReport',
+  '/reports/additional': 'additionalReports',
+  '/reports/cap': 'capReport',
+  '/reports/sampling': 'samplingReport',
+  '/reports/comparison': 'comparisonReport',
+  '/reports/click': 'clickReport',
+  '/reports/conversion': 'conversionReport',
+  '/reports/impression': 'impressionReport',
+  '/reports/postback-logs': 'postbackLogs',
+  '/reports/recent-exports': 'recentExports',
 };
 
 const pageToRoute: Partial<Record<NavPage, string>> = {
   dashboard: '/dashboard',
-  contacts: '/contacts',
+  campaigns: '/dashboard/campaigns',
+  manageCampaigns: '/dashboard/request-offers',
+  contacts: '/dashboard/affiliates',
+  postbackLogs: '/dashboard/postback',
+  advertisers: '/dashboard/advertiser',
+  reports: '/dashboard/performance',
+  conversionReport: '/dashboard/analytics',
+  impressionReport: '/dashboard/impressions',
+  additionalReports: '/dashboard/validation',
+  publishersManage: '/dashboard/manager',
+  integration: '/dashboard/integrations',
+  settings: '/dashboard/settings',
   deals: '/deals',
   activities: '/activities',
-  reports: '/reports',
-  settings: '/settings',
   apiDocs: '/api/docs',
   apiStudio: '/api/studio',
-  manageCampaigns: '/campaigns/manage',
+  apiHealth: '/api/health',
   createCampaign: '/campaigns/create',
+  campaignsReport: '/reports/campaigns',
+  publishersReport: '/reports/publishers',
+  advertisersReport: '/reports/advertisers',
+  dailyReport: '/reports/daily',
+  goalsReport: '/reports/goals',
+  cohortReport: '/reports/cohort',
+  capReport: '/reports/cap',
+  samplingReport: '/reports/sampling',
+  comparisonReport: '/reports/comparison',
+  clickReport: '/reports/click',
+  recentExports: '/reports/recent-exports',
 };
 
 const normalizeRoute = (pathname: string) => pathname.replace(/\/+$/, '') || '/';
-const getPageFromPath = (pathname: string): NavPage => routeToPage[normalizeRoute(pathname)] ?? 'dashboard';
+const allNavPages: NavPage[] = [
+  'dashboard',
+  'campaigns',
+  'manageCampaigns',
+  'createCampaign',
+  'campaignWizard',
+  'campaignAccess',
+  'trafficChannels',
+  'creatives',
+  'couponCodes',
+  'featuredCampaigns',
+  'bulkTargeting',
+  'reports',
+  'campaignsReport',
+  'publishersReport',
+  'advertisersReport',
+  'dailyReport',
+  'goalsReport',
+  'cohortReport',
+  'additionalReports',
+  'capReport',
+  'samplingReport',
+  'comparisonReport',
+  'clickReport',
+  'conversionReport',
+  'impressionReport',
+  'postbackLogs',
+  'recentExports',
+  'contacts',
+  'deals',
+  'activities',
+  'publishers',
+  'publishersManage',
+  'publishersPostbackPixels',
+  'advertisers',
+  'advertisersManage',
+  'advertisersPostbacksHitsReceived',
+  'invoices',
+  'invoicesDashboard',
+  'invoicesPublishers',
+  'invoicesAdvertisers',
+  'invoicesSettings',
+  'automation',
+  'integration',
+  'network',
+  'mobileAppTracking',
+  'tools',
+  'ecommerce',
+  'workflowAutomation',
+  'antiFraudTools',
+  'dataImport',
+  'fillerRules',
+  'offerChecker',
+  'linkTestTools',
+  'globalTargeting',
+  'smartLink',
+  'notifications',
+  'support',
+  'apiDocs',
+  'apiStudio',
+  'apiHealth',
+  'settings',
+];
+
+const navPageSet = new Set<NavPage>(allNavPages);
+
+const getPageFromPath = (pathname: string): NavPage => {
+  const normalized = normalizeRoute(pathname);
+  const direct = routeToPage[normalized];
+  if (direct) return direct;
+
+  if (normalized.startsWith('/app/')) {
+    const pageToken = decodeURIComponent(normalized.slice('/app/'.length)).trim();
+    if (navPageSet.has(pageToken as NavPage)) {
+      return pageToken as NavPage;
+    }
+  }
+
+  return 'dashboard';
+};
 
 const resolveAccountTypeFromRole = (role: string): AuthAccountType => {
   const normalizedRole = role.trim().toLowerCase();
@@ -96,6 +227,26 @@ const extractToken = (input: unknown): string | null => {
   return null;
 };
 
+const isLikelyErrorText = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return true;
+  return (
+    normalized.includes('not found') ||
+    normalized.includes('invalid') ||
+    normalized.includes('unauthorized') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('error') ||
+    normalized.includes('failed') ||
+    normalized.includes('admin data not found')
+  );
+};
+
+const normalizeDisplayName = (value: string | null | undefined): string | null => {
+  const text = (value ?? '').trim();
+  if (!text || isLikelyErrorText(text)) return null;
+  return text;
+};
+
 const extractPartnersId = (input: unknown): string | null => {
   if (!input || typeof input !== 'object') return null;
 
@@ -119,8 +270,7 @@ const extractDisplayName = (input: unknown): string | null => {
   if (!input) return null;
 
   if (typeof input === 'string') {
-    const value = input.trim();
-    return value || null;
+    return normalizeDisplayName(input);
   }
 
   if (typeof input !== 'object') return null;
@@ -129,16 +279,24 @@ const extractDisplayName = (input: unknown): string | null => {
   const directKeys = ['name', 'fullName', 'full_name', 'displayName', 'display_name', 'username'];
   for (const key of directKeys) {
     const value = object[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'string') {
+      const normalized = normalizeDisplayName(value);
+      if (normalized) return normalized;
+    }
   }
 
   const firstName = object.firstName;
   const lastName = object.lastName;
   if (typeof firstName === 'string' && firstName.trim()) {
-    return `${firstName.trim()}${typeof lastName === 'string' && lastName.trim() ? ` ${lastName.trim()}` : ''}`.trim();
+    const combined = `${firstName.trim()}${typeof lastName === 'string' && lastName.trim() ? ` ${lastName.trim()}` : ''}`.trim();
+    const normalized = normalizeDisplayName(combined);
+    if (normalized) return normalized;
   }
 
-  for (const value of Object.values(object)) {
+  for (const [key, value] of Object.entries(object)) {
+    if (['message', 'error', 'msg', 'responseMessage', 'status', 'statusText'].includes(key)) {
+      continue;
+    }
     const nested = extractDisplayName(value);
     if (nested) return nested;
   }
@@ -152,6 +310,16 @@ const hasPersistedSession = () => {
   return explicitSession || tokenSession;
 };
 
+const readCachedDisplayName = () => {
+  const cached = normalizeDisplayName(localStorage.getItem(USER_NAME_KEY));
+  if (cached) return cached;
+
+  const savedEmail = localStorage.getItem(USER_EMAIL_KEY)?.trim() || '';
+  if (savedEmail.includes('@')) return savedEmail.split('@')[0];
+
+  return '';
+};
+
 export default function App() {
   const normalizedPath = normalizeRoute(window.location.pathname);
   const isPublicApiDocsRoute = normalizedPath === '/api/docs';
@@ -159,17 +327,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const deriveFallbackName = () => {
-    const savedName = localStorage.getItem(USER_NAME_KEY)?.trim() || '';
-    if (savedName) return savedName;
-
-    const savedEmail = localStorage.getItem(USER_EMAIL_KEY)?.trim() || '';
-    if (savedEmail.includes('@')) return savedEmail.split('@')[0];
-
-    return '';
-  };
-
-  const [displayName, setDisplayName] = useState(deriveFallbackName());
+  const [displayName, setDisplayName] = useState(readCachedDisplayName());
   const [displayEmail, setDisplayEmail] = useState(localStorage.getItem(USER_EMAIL_KEY) || '');
   const [displayRole, setDisplayRole] = useState(localStorage.getItem(USER_ROLE_KEY) || 'User');
   const [activePage, setActivePage] = useState<NavPage>(getPageFromPath(window.location.pathname));
@@ -212,8 +370,26 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
+  useEffect(() => {
+    const onNavigate = (event: Event) => {
+      const customEvent = event as CustomEvent<{ page?: NavPage }>;
+      const page = customEvent.detail?.page;
+      if (!page) return;
+
+      const nextRoute = pageToRoute[page] ?? `/app/${page}`;
+      if (normalizeRoute(window.location.pathname) !== nextRoute) {
+        window.history.pushState({}, '', nextRoute);
+      }
+      setActivePage(page);
+      setMobileSidebarOpen(false);
+    };
+
+    window.addEventListener('repowire:navigate', onNavigate as EventListener);
+    return () => window.removeEventListener('repowire:navigate', onNavigate as EventListener);
+  }, []);
+
   const handleNavigate = (page: NavPage) => {
-    const nextRoute = pageToRoute[page];
+    const nextRoute = pageToRoute[page] ?? `/app/${page}`;
     if (nextRoute && normalizeRoute(window.location.pathname) !== nextRoute) {
       window.history.pushState({}, '', nextRoute);
     }
@@ -250,16 +426,41 @@ export default function App() {
   const renderPage = () => {
     switch (activePage) {
       case 'dashboard': return <Dashboard displayName={displayName} displayEmail={displayEmail} />;
+      case 'campaigns': return <CampaignsList />;
+      case 'campaignWizard':
+      case 'campaignAccess':
+      case 'trafficChannels':
+      case 'creatives':
+      case 'couponCodes':
+      case 'featuredCampaigns':
+      case 'bulkTargeting':
+        return <CampaignModulesWorkspace activePage={activePage} />;
       case 'contacts': return <Contacts />;
       case 'deals': return <Deals />;
       case 'activities': return <Activities />;
-      case 'reports': return <Reports />;
+      case 'reports': return <ReportsWorkspace key="reports" initialView="summary" />;
+      case 'campaignsReport': return <ReportsWorkspace key="campaignsReport" initialView="campaignsReport" />;
+      case 'publishersReport': return <ReportsWorkspace key="publishersReport" initialView="publishersReport" />;
+      case 'advertisersReport': return <ReportsWorkspace key="advertisersReport" initialView="advertisersReport" />;
+      case 'dailyReport': return <ReportsWorkspace key="dailyReport" initialView="dailyReport" />;
+      case 'goalsReport': return <ReportsWorkspace key="goalsReport" initialView="goalsReport" />;
+      case 'cohortReport': return <ReportsWorkspace key="cohortReport" initialView="cohortReport" />;
+      case 'additionalReports': return <ReportsWorkspace key="additionalReports" initialView="additionalReports" />;
+      case 'capReport': return <ReportsWorkspace key="capReport" initialView="capReport" />;
+      case 'samplingReport': return <ReportsWorkspace key="samplingReport" initialView="samplingReport" />;
+      case 'comparisonReport': return <ReportsWorkspace key="comparisonReport" initialView="comparisonReport" />;
+      case 'clickReport': return <ReportsWorkspace key="clickReport" initialView="clickReport" />;
+      case 'conversionReport': return <ReportsWorkspace key="conversionReport" initialView="conversionReport" />;
+      case 'impressionReport': return <ReportsWorkspace key="impressionReport" initialView="impressionReport" />;
+      case 'postbackLogs': return <ReportsWorkspace key="postbackLogs" initialView="postbackLogs" />;
+      case 'recentExports': return <ReportsWorkspace key="recentExports" initialView="recentExports" />;
       case 'apiDocs': return <ApiDocs />;
       case 'apiStudio': return <ApiStudio />;
+      case 'apiHealth': return <ApiHealth />;
       case 'manageCampaigns': return <OffersManagement initialTab="list" />;
       case 'createCampaign': return <OffersManagement initialTab="create" />;
       case 'settings': return <Settings displayName={displayName} displayEmail={displayEmail} displayRole={displayRole} />;
-      default: return <CrmModuleDetails activePage={activePage} />;
+      default: return <ApiModuleWorkbench activePage={activePage} />;
     }
   };
 
@@ -276,6 +477,9 @@ export default function App() {
       );
     }
 
+    // Test with simple auth form - comment out to use full AuthPortal
+    // return <SimpleAuthTest />;
+    
     return (
       <AuthPortal
         mode={authMode}
@@ -538,7 +742,13 @@ export default function App() {
             }
 
             const profileResponse = token ? await repowireApi.fetchAccountProfile(accountType, source).catch(() => null) : null;
-            const loginDisplayName = extractDisplayName(profileResponse) || extractDisplayName(response) || extractDisplayName(name) || localStorage.getItem(USER_NAME_KEY) || email.trim().split('@')[0] || 'Account';
+            const loginDisplayName =
+              extractDisplayName(profileResponse) ||
+              extractDisplayName(response) ||
+              extractDisplayName(name) ||
+              normalizeDisplayName(localStorage.getItem(USER_NAME_KEY)) ||
+              email.trim().split('@')[0] ||
+              'Account';
             localStorage.setItem(USER_NAME_KEY, loginDisplayName);
             setDisplayName(loginDisplayName);
 
@@ -550,7 +760,9 @@ export default function App() {
             }
           } catch (error) {
             if (error instanceof ApiError) {
-              if (error.status === 401 || error.status === 403) {
+              if (error.status === 0) {
+                setAuthError('Network error while contacting auth service. Check internet, then try again. If you are on local dev, run the app with npm run dev so /api/proxy is available.');
+              } else if (error.status === 401 || error.status === 403) {
                 setAuthError(`Authentication failed (${error.status}). Verify email and password are correct. If using SubAdmin, select "Admin" account type.`);
               } else if (error.status === 400 || error.status === 404 || error.status === 409) {
                 setAuthError(`${mode === 'register' ? 'Registration' : 'Login'} failed (${error.status}). Check account type matches your credentials (SubAdmin→Admin, Publisher→Publisher, Advertiser→Advertiser).`);

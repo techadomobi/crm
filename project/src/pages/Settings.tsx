@@ -29,9 +29,15 @@ export default function Settings({ displayName, displayEmail, displayRole }: Set
   const [notice, setNotice] = useState<string | null>(null);
   const [authSource, setAuthSource] = useState<string>('unknown');
   const [authMode, setAuthMode] = useState<string>('unknown');
+  const [tokenInput, setTokenInput] = useState<string>(localStorage.getItem('repowire_token') ?? '');
+  const [partnersInput, setPartnersInput] = useState<string>(localStorage.getItem('repowire_partners_id') ?? '');
   const [tokenPreview, setTokenPreview] = useState<string>('missing');
   const [tokenValidation, setTokenValidation] = useState<string>('Not validated yet.');
   const [isValidatingToken, setIsValidatingToken] = useState(false);
+
+  const notifySessionUpdate = () => {
+    window.dispatchEvent(new Event('repowire-session-updated'));
+  };
 
   useEffect(() => {
     const source = localStorage.getItem('repowire_auth_source') ?? 'unknown';
@@ -40,8 +46,35 @@ export default function Settings({ displayName, displayEmail, displayRole }: Set
 
     setAuthSource(source);
     setAuthMode(mode);
+    setTokenInput(token);
+    setPartnersInput(localStorage.getItem('repowire_partners_id') ?? '');
     setTokenPreview(token ? `${token.slice(0, 14)}...${token.slice(-8)}` : 'missing');
   }, []);
+
+  const saveSession = () => {
+    const cleanedToken = tokenInput.trim().replace(/^['"]+|['"]+$/g, '').replace(/^Bearer\s+/i, '');
+    const cleanedPartnersId = partnersInput.trim();
+
+    if (cleanedToken) {
+      localStorage.setItem('repowire_token', cleanedToken);
+      localStorage.setItem('repowire_session_active', 'true');
+      setTokenPreview(`${cleanedToken.slice(0, 14)}...${cleanedToken.slice(-8)}`);
+    } else {
+      localStorage.removeItem('repowire_token');
+      localStorage.removeItem('repowire_session_active');
+      setTokenPreview('missing');
+    }
+
+    if (cleanedPartnersId) {
+      localStorage.setItem('repowire_partners_id', cleanedPartnersId);
+    } else {
+      localStorage.removeItem('repowire_partners_id');
+    }
+
+    notifySessionUpdate();
+
+    setNotice('Session saved. Open Offer List or Dashboard again to reload live data.');
+  };
 
   const validateToken = async () => {
     const token = localStorage.getItem('repowire_token')?.trim();
@@ -110,6 +143,68 @@ export default function Settings({ displayName, displayEmail, displayRole }: Set
           >
             {isValidatingToken ? 'Validating...' : 'Validate Token'}
           </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden hover:shadow-lg transition-all">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="text-slate-900 font-semibold text-sm flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><CreditCard size={14} /></div>
+            Session Settings
+          </h3>
+          <p className="text-slate-400 text-xs mt-0.5">Save token and partners_Id for protected API calls.</p>
+        </div>
+        <div className="p-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="text-slate-500 text-xs font-medium block mb-1.5">Bearer Token</label>
+            <textarea
+              value={tokenInput}
+              onChange={(event) => setTokenInput(event.target.value)}
+              placeholder="Paste JWT token here"
+              className="w-full min-h-24 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+            />
+          </div>
+          <div>
+            <label className="text-slate-500 text-xs font-medium block mb-1.5">partners_Id</label>
+            <input
+              type="text"
+              value={partnersInput}
+              onChange={(event) => setPartnersInput(event.target.value)}
+              placeholder="Enter partners_Id"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+            />
+          </div>
+          <div>
+            <label className="text-slate-500 text-xs font-medium block mb-1.5">Save status</label>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-700">
+              {tokenInput.trim() ? 'Token ready' : 'Token missing'} · {partnersInput.trim() ? 'partners_Id ready' : 'partners_Id missing'}
+            </div>
+          </div>
+          <div className="sm:col-span-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={saveSession}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+            >
+              Save Session
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTokenInput('');
+                setPartnersInput('');
+                localStorage.removeItem('repowire_token');
+                localStorage.removeItem('repowire_partners_id');
+                localStorage.removeItem('repowire_session_active');
+                notifySessionUpdate();
+                setTokenPreview('missing');
+                setNotice('Session cleared.');
+              }}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Clear Session
+            </button>
+          </div>
         </div>
       </div>
 

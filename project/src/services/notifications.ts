@@ -1,10 +1,38 @@
-import { apiClient } from '../lib/apiClient';
-import type { ApiEnvelope } from '../types/api';
-import { asArray, unwrap } from './utils';
+import { repowireApi } from '../api/repowireApi';
+import { asArray } from './utils';
 
 export const notificationsService = {
   async list(params?: Record<string, string | number>) {
-    const response = await apiClient.get<ApiEnvelope<unknown>>('/notifications', { params });
-    return asArray<Record<string, unknown>>(unwrap(response.data));
+    const limit = Number(params?.limit ?? 20);
+    const page = Number(params?.page ?? 1);
+
+    const [postbacks, conversions] = await Promise.allSettled([
+      repowireApi.conversionPostbackLogs({ page, limit }),
+      repowireApi.conversionList({ page, limit }),
+    ]);
+
+    const postbackRows = postbacks.status === 'fulfilled' ? asArray<Record<string, unknown>>(postbacks.value) : [];
+    const conversionRows = conversions.status === 'fulfilled' ? asArray<Record<string, unknown>>(conversions.value) : [];
+
+    const merged = [
+      ...postbackRows.map((row, index) => ({
+        id: String(row._id || row.id || row.postbackId || `postback-${index}`),
+        type: 'postback',
+        title: String(row.message || row.status || 'Postback log update'),
+        status: String(row.status || 'info'),
+        createdAt: String(row.createdAt || row.date || new Date().toISOString()),
+      })),
+      ...conversionRows.map((row, index) => ({
+        id: String(row._id || row.id || row.conversionId || `conversion-${index}`),
+        type: 'conversion',
+        title: String(row.offerName || row.conversionStatus || 'Conversion update'),
+        status: String(row.conversionStatus || row.status || 'info'),
+        createdAt: String(row.createdAt || row.date || new Date().toISOString()),
+      })),
+    ];
+
+    return merged
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 20);
   },
 };

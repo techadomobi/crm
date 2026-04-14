@@ -10,11 +10,47 @@ export const apiClient = axios.create({
   timeout: 30_000,
 });
 
+const normalizeToken = (raw: string | null | undefined) =>
+  (raw ?? '').trim().replace(/^['"]+|['"]+$/g, '').replace(/^Bearer\s+/i, '');
+
+const resolveStoredPartnersId = () =>
+  (localStorage.getItem('repowire_partners_id')
+    ?? localStorage.getItem('repowire_partners_Id')
+    ?? localStorage.getItem('partners_Id')
+    ?? '')
+    .trim();
+
+const needsPartnersId = (url?: string) => {
+  if (!url) return false;
+  return /^\/(offer|publicher|advertiser|conversion|report|top|sentLogs|manager|publisherManagement)\//i.test(url);
+};
+
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = useAppStore.getState().authToken || localStorage.getItem('repowire_token') || '';
+  const token =
+    normalizeToken(useAppStore.getState().authToken)
+    || normalizeToken(localStorage.getItem('repowire_token'))
+    || normalizeToken(localStorage.getItem('access_token') ?? localStorage.getItem('token'));
+
   if (token) {
-    config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+    config.headers.Authorization = `Bearer ${token}`;
   }
+
+  const method = (config.method ?? 'get').toLowerCase();
+  if (method === 'get' && needsPartnersId(config.url)) {
+    const params = ((config.params ?? {}) as Record<string, unknown>);
+    const hasPartners = Boolean(params.partners_Id ?? params.partnersId ?? params.partnerId ?? params.partner_id);
+
+    if (!hasPartners) {
+      const partnersId = resolveStoredPartnersId();
+      if (partnersId) {
+        config.params = {
+          ...params,
+          partners_Id: partnersId,
+        };
+      }
+    }
+  }
+
   return config;
 });
 

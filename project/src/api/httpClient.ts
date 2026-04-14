@@ -1,4 +1,5 @@
 export const API_BASE_URL = import.meta.env.VITE_PROXY_BASE_URL ?? import.meta.env.VITE_API_BASE_URL ?? '/api/proxy';
+const DIRECT_API_BASE_URL = 'https://apiv2.offersmeta.in';
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -12,6 +13,53 @@ export interface ApiRequestOptions {
   headers?: Record<string, string>;
   skipAuth?: boolean;
 }
+
+const normalizeToken = (raw: string | null | undefined) =>
+  (raw ?? '').trim().replace(/^['"]+|['"]+$/g, '').replace(/^Bearer\s+/i, '');
+
+const resolveStoredToken = () => {
+  const direct = normalizeToken(localStorage.getItem('repowire_token'));
+  if (direct) return direct;
+  const fallback = normalizeToken(localStorage.getItem('access_token') ?? localStorage.getItem('token'));
+  return fallback;
+};
+
+const resolveStoredPartnersId = () =>
+  (localStorage.getItem('repowire_partners_id')
+    ?? localStorage.getItem('repowire_partners_Id')
+    ?? localStorage.getItem('partners_Id')
+    ?? '')
+    .trim();
+
+const isProtectedOffersmetaPath = (path: string) =>
+  /^\/(offer|publicher|advertiser|conversion|report|top|sentLogs|manager|publisherManagement)\//i.test(path);
+
+const isAuthPath = (path: string) =>
+  /\/(login|signup|singleLogin)$/i.test(path);
+
+const withAutoPartnersId = (
+  path: string,
+  query: ApiRequestOptions['query'],
+  method: RequestMethod,
+  skipAuth: boolean
+) => {
+  if (skipAuth || method !== 'GET' || !isProtectedOffersmetaPath(path) || isAuthPath(path)) {
+    return query;
+  }
+
+  const hasPartners = Boolean(
+    query && (query.partners_Id ?? query.partnersId ?? query.partnerId ?? query.partner_id)
+  );
+  if (hasPartners) return query;
+
+  const partnersId = resolveStoredPartnersId();
+  if (!partnersId) return query;
+
+  return {
+    ...(query ?? {}),
+    partners_Id: partnersId,
+  };
+};
 
 export class ApiError extends Error {
   status: number;
@@ -97,8 +145,11 @@ const buildApiFetchInit = (path: string, options: ApiRequestOptions = {}) => {
     skipAuth = false,
   } = options;
 
-  const authToken = token ?? localStorage.getItem('repowire_token') ?? '';
-  const url = `${API_BASE_URL}${path}${buildQueryString(query)}`;
+  const authToken = normalizeToken(token) || resolveStoredToken();
+  const effectiveQuery = withAutoPartnersId(path, query, method, skipAuth);
+  const queryString = buildQueryString(effectiveQuery);
+  const url = `${API_BASE_URL}${path}${queryString}`;
+  const directUrl = `${DIRECT_API_BASE_URL}${path}${queryString}`;
 
   const requestHeaders: Record<string, string> = {
     Accept: 'application/json, text/plain, */*',
@@ -112,7 +163,7 @@ const buildApiFetchInit = (path: string, options: ApiRequestOptions = {}) => {
   };
 
   if (!skipAuth && authToken) {
-    requestHeaders.Authorization = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
+    requestHeaders.Authorization = `Bearer ${authToken}`;
   }
 
   if (body) {
@@ -127,7 +178,25 @@ const buildApiFetchInit = (path: string, options: ApiRequestOptions = {}) => {
     }
   }
 
-  return { url, requestInit };
+  return { url, directUrl, requestInit, path };
+};
+
+const isNetworkFetchError = (error: unknown) =>
+  error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message);
+
+const fetchWithFallback = async (path: string, url: string, directUrl: string, requestInit: RequestInit) => {
+  try {
+    return await fetch(url, requestInit);
+  } catch (error) {
+    const method = String(requestInit.method ?? 'GET').toUpperCase();
+    const isSafeRead = method === 'GET' || method === 'HEAD';
+
+    // Keep reads and auth resilient when local proxy route is unreachable.
+    if ((isAuthPath(path) || isSafeRead) && isNetworkFetchError(error)) {
+      return fetch(directUrl, requestInit);
+    }
+    throw error;
+  }
 };
 
 export type ApiExecuteResult =
@@ -162,8 +231,14 @@ const isLikelyBinaryResponse = (contentType: string) => {
 
 /** Same transport as {@link apiRequest} but preserves binary bodies (exports) and returns structured result. */
 export async function apiExecute(path: string, options: ApiRequestOptions = {}): Promise<ApiExecuteResult> {
-  const { url, requestInit } = buildApiFetchInit(path, options);
-  const response = await fetch(url, requestInit);
+  const { url, directUrl, requestInit } = buildApiFetchInit(path, options);
+  let response: Response;
+  try {
+    response = await fetchWithFallback(path, url, directUrl, requestInit);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network error';
+    throw new ApiError(`Network request failed: ${message}`, 0, { path, url });
+  }
   const contentType = response.headers.get('content-type') ?? '';
 
   const readErrorPayload = async (): Promise<unknown> => {
@@ -206,8 +281,14 @@ export async function apiExecute(path: string, options: ApiRequestOptions = {}):
 }
 
 export async function apiRequest<T = unknown>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { url, requestInit } = buildApiFetchInit(path, options);
-  const response = await fetch(url, requestInit);
+  const { url, directUrl, requestInit } = buildApiFetchInit(path, options);
+  let response: Response;
+  try {
+    response = await fetchWithFallback(path, url, directUrl, requestInit);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network error';
+    throw new ApiError(`Network request failed: ${message}`, 0, { path, url });
+  }
   const text = await response.text();
   let data: unknown = null;
 

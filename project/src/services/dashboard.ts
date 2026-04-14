@@ -125,11 +125,32 @@ export const dashboardService = {
         owner: activity.assignee,
       }));
 
+    const liveDeals = deals.map((deal) => ({
+      id: deal.id,
+      title: deal.title,
+      value: deal.value,
+      stage: deal.stage,
+      closeDate: deal.closeDate,
+      owner: deal.assignee,
+      createdAt: deal.createdAt,
+    }));
+
+    const liveActivities = activities.map((activity) => ({
+      id: activity.id,
+      type: activity.type,
+      title: activity.title,
+      dueDate: activity.date,
+      status: activity.status,
+      owner: activity.assignee,
+    }));
+
     return {
       totalContacts: contacts.length,
       openDealsValue,
       leadsThisMonth,
       activitiesDueToday,
+      liveDeals,
+      liveActivities,
       recentContacts,
       dealPipeline: Array.from(dealPipelineMap.entries()).map(([stage, value]) => ({ stage, value })),
       pipelineStages: Array.from(pipelineStageCounts.entries()).map(([stage, count]) => ({ stage, count })),

@@ -1,17 +1,19 @@
-import { apiClient } from '../lib/apiClient';
-import type { ApiEnvelope } from '../types/api';
 import type { LeadRecord } from '../types/crm';
-import { asArray, unwrap } from './utils';
+import { fetchLiveDeals } from '../api/liveDataAdapters';
 
 export const leadsService = {
   async listPipeline(params?: Record<string, string | number>) {
-    const response = await apiClient.get<ApiEnvelope<unknown>>('/leads/pipeline', { params });
-    const rows = asArray<Record<string, unknown>>(unwrap(response.data));
-    return rows.map((row, index) => ({
-      id: String(row._id || row.id || row.offerId || `lead-${index}`),
-      status: String(row.status || row.stage || 'open'),
-      source: String(row.source || row.offerName || ''),
-      createdAt: typeof row.createdAt === 'string' ? row.createdAt : undefined,
-    })) as LeadRecord[];
+    const deals = await fetchLiveDeals();
+    const rows = deals
+      .filter((deal) => !['closed_won', 'closed_lost'].includes(deal.stage))
+      .map((deal, index) => ({
+        id: deal.id || `lead-${index}`,
+        status: deal.stage || 'open',
+        source: deal.title || deal.company || '',
+        createdAt: deal.createdAt,
+      })) as LeadRecord[];
+
+    const limit = Number(params?.limit ?? 0);
+    return Number.isFinite(limit) && limit > 0 ? rows.slice(0, limit) : rows;
   },
 };

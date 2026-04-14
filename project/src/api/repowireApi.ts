@@ -46,6 +46,16 @@ export interface OfferListQuery extends ListQuery {
   partners_Id?: string;
 }
 
+export interface ReportQuery extends ListQuery {
+  partners_Id?: string;
+  startDate?: string;
+  endDate?: string;
+  publisherId?: string;
+  advertiserId?: string;
+  publisherManagerId?: string;
+  searchBy?: string;
+}
+
 export type CreateOfferPayload = Record<string, unknown>;
 
 const profileEndpointPriority: Record<AuthAccountType, string[]> = {
@@ -200,6 +210,72 @@ export const repowireApi = {
 
   offerList: (query?: OfferListQuery) =>
     apiRequest('/offer/offerList', {
+      method: 'GET',
+      query,
+    }),
+
+  campaignList: (query?: ListQuery & { partners_Id?: string }) =>
+    apiRequest('/offer/allOfferList', {
+      method: 'GET',
+      query,
+    }),
+
+  publisherCampaignList: (query?: { partners_Id?: string; publisherId?: string; page?: number; search?: string }) =>
+    apiRequest('/offer/publisherOfferList', {
+      method: 'GET',
+      query,
+    }),
+
+  advertiserCampaignList: (query?: { partners_Id?: string; advertiserId?: string; page?: number; search?: string }) =>
+    apiRequest('/offer/advertiserOfferList', {
+      method: 'GET',
+      query,
+    }),
+
+  advertiserManagerCampaignList: (query?: { advertiserManagerId?: string; page?: number }) =>
+    apiRequest('/offer/advertiserManagerOfferList', {
+      method: 'GET',
+      query,
+    }),
+
+  offerReport: (query?: ReportQuery) =>
+    apiRequest('/report/offerReport', {
+      method: 'GET',
+      query,
+    }),
+
+  publisherReport: (query?: ReportQuery) =>
+    apiRequest('/report/publisherReport', {
+      method: 'GET',
+      query,
+    }),
+
+  advertiserReport: (query?: ReportQuery) =>
+    apiRequest('/report/advertiserReport', {
+      method: 'GET',
+      query,
+    }),
+
+  publishersReport: (query?: ReportQuery) =>
+    apiRequest('/report/publishersReport', {
+      method: 'GET',
+      query,
+    }),
+
+  publisherManagerReport: (query?: ReportQuery) =>
+    apiRequest('/report/publisherManagerReport', {
+      method: 'GET',
+      query,
+    }),
+
+  affiliatesPerformanceReport: (query?: ReportQuery) =>
+    apiRequest('/report/AffilitesPerformanceReport', {
+      method: 'GET',
+      query,
+    }),
+
+  advertiserPerformanceReport: (query?: ReportQuery) =>
+    apiRequest('/report/advertiserPerformanceReport', {
       method: 'GET',
       query,
     }),

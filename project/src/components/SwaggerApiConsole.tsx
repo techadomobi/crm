@@ -15,12 +15,11 @@ import {
   Table2,
   Terminal,
 } from 'lucide-react';
-import { API_BASE_URL, ApiError, apiExecute, type RequestMethod } from '../api/httpClient';
+import { API_BASE_URL, ApiError, type RequestMethod } from '../api/httpClient';
 import {
   applyPathParams,
   defaultSkipAuthForPath,
   flattenSwaggerOperations,
-  type OffersmetaSwaggerSpec,
   type SwaggerOperation,
   type SwaggerParameter,
 } from '../lib/offersmetaSwagger';
@@ -31,8 +30,8 @@ import {
   normalizeCatalogRole,
   type CatalogRole,
 } from '../lib/apiRoleFilter';
-
-const SWAGGER_URL = `${API_BASE_URL.replace(/\/+$/, '')}/swagger.json`;
+import { loadSwaggerSpec, SwaggerSpecLoadError } from '../services/swaggerSpecService';
+import { executeApiOperation } from '../services/apiOperationService';
 
 const paramKey = (op: SwaggerOperation, p: SwaggerParameter) => `${op.method}:${op.path}:${p.name}:${p.in}`;
 
@@ -115,16 +114,19 @@ const buildCurlPreview = (
 
 export interface SwaggerApiConsoleProps {
   embedded?: boolean;
+  initialSearch?: string;
 }
 
 type SpecMeta = { title: string; version: string; host: string; basePath: string };
 
-export default function SwaggerApiConsole({ embedded = true }: SwaggerApiConsoleProps) {
+export default function SwaggerApiConsole({ embedded = true, initialSearch = '' }: SwaggerApiConsoleProps) {
   const [loadState, setLoadState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempts, setLoadAttempts] = useState<Array<{ url: string; reason: string }>>([]);
+  const [loadedSpecSource, setLoadedSpecSource] = useState<string | null>(null);
   const [specMeta, setSpecMeta] = useState<SpecMeta | null>(null);
   const [operations, setOperations] = useState<SwaggerOperation[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   const [methodFilter, setMethodFilter] = useState<'ALL' | RequestMethod>('ALL');
   const [activeTag, setActiveTag] = useState<string>('ALL');
   const [expandedTags, setExpandedTags] = useState<Record<string, boolean>>({});
@@ -181,15 +183,11 @@ export default function SwaggerApiConsole({ embedded = true }: SwaggerApiConsole
   const loadSpec = useCallback(async () => {
     setLoadState('loading');
     setLoadError(null);
+    setLoadAttempts([]);
     try {
-      const res = await fetch(SWAGGER_URL, { cache: 'no-store' });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status} loading swagger.json`);
-      }
-      const spec = (await res.json()) as OffersmetaSwaggerSpec;
-      if (!spec.paths || typeof spec.paths !== 'object') {
-        throw new Error('Invalid swagger: missing paths');
-      }
+      const { spec, sourceUrl, attempts } = await loadSwaggerSpec();
+      setLoadedSpecSource(sourceUrl);
+      setLoadAttempts(attempts);
       const ops = flattenSwaggerOperations(spec);
       setOperations(ops);
       setSpecMeta({
@@ -216,13 +214,22 @@ export default function SwaggerApiConsole({ embedded = true }: SwaggerApiConsole
       setExpandedTags(expand);
     } catch (e) {
       setLoadState('error');
-      setLoadError(e instanceof Error ? e.message : 'Failed to load swagger.json');
+      if (e instanceof SwaggerSpecLoadError) {
+        setLoadError(e.message);
+        setLoadAttempts(e.attempts);
+      } else {
+        setLoadError(e instanceof Error ? e.message : 'Failed to load swagger.json');
+      }
     }
   }, []);
 
   useEffect(() => {
     void loadSpec();
   }, [loadSpec]);
+
+  useEffect(() => {
+    setSearch(initialSearch);
+  }, [initialSearch]);
 
   const visibleOps = useMemo(
     () => filterOperationsForRole(operations, catalogRole, fullCatalog),
@@ -516,7 +523,7 @@ export default function SwaggerApiConsole({ embedded = true }: SwaggerApiConsole
         })
       );
 
-      const result = await apiExecute(resolvedPath, execOpts);
+      const result = await executeApiOperation(resolvedPath, execOpts);
       setLastStatus(result.status);
 
       if (result.kind === 'json') {
@@ -594,6 +601,9 @@ export default function SwaggerApiConsole({ embedded = true }: SwaggerApiConsole
               <span className="font-mono text-cyan-200/90">{specMeta ? `https://${specMeta.host}${specMeta.basePath}` : 'apiv2.offersmeta.in/'}</span>
               — GET, POST, PUT, DELETE, PATCH from live <code className="text-slate-300">swagger.json</code>
             </p>
+            {loadedSpecSource && (
+              <p className="text-[10px] text-slate-500 mt-1 font-mono">Spec source: {loadedSpecSource}</p>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -681,7 +691,15 @@ export default function SwaggerApiConsole({ embedded = true }: SwaggerApiConsole
             <div>
               <p className="font-semibold">Could not load swagger.json</p>
               <p className="mt-0.5">{loadError}</p>
-              <p className="mt-1 font-mono text-[10px] text-rose-700">{SWAGGER_URL}</p>
+              {loadAttempts.length > 0 && (
+                <div className="mt-1 space-y-0.5">
+                  {loadAttempts.map((attempt) => (
+                    <p key={attempt.url} className="font-mono text-[10px] text-rose-700 break-all">
+                      {attempt.url} — {attempt.reason}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

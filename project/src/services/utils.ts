@@ -20,15 +20,31 @@ export const asArray = <T>(value: unknown): T[] => {
     return value as T[];
   }
 
-  if (value && typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    const keys = ['data', 'result', 'rows', 'items', 'list', 'records', 'docs'];
-    for (const key of keys) {
-      const row = obj[key];
-      if (Array.isArray(row)) {
-        return row as T[];
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  const obj = value as Record<string, unknown>;
+
+  // Handle common API envelope keys first, and recurse if the value is nested.
+  const keys = ['data', 'result', 'rows', 'items', 'list', 'records', 'docs', 'payload'];
+  for (const key of keys) {
+    const row = obj[key];
+    if (Array.isArray(row)) {
+      return row as T[];
+    }
+    if (row && typeof row === 'object') {
+      const nested = asArray<T>(row);
+      if (nested.length > 0) {
+        return nested;
       }
     }
+  }
+
+  // Some endpoints wrap arrays in a single top-level key with arbitrary naming.
+  const entries = Object.values(obj);
+  if (entries.length === 1 && entries[0] && typeof entries[0] === 'object') {
+    return asArray<T>(entries[0]);
   }
 
   return [];

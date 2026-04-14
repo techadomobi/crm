@@ -101,6 +101,16 @@ const fieldClass =
 
 const labelClass = 'block text-xs font-semibold text-slate-600 mb-1';
 
+const getStoredPartnersId = () => {
+  if (typeof window === 'undefined') return '';
+  return (
+    localStorage.getItem('repowire_partners_id')
+    ?? localStorage.getItem('repowire_partners_Id')
+    ?? localStorage.getItem('partners_Id')
+    ?? ''
+  ).trim();
+};
+
 export default function OffersManagement({ initialTab = 'list' }: OffersManagementProps) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [rows, setRows] = useState<unknown[]>([]);
@@ -123,12 +133,8 @@ export default function OffersManagement({ initialTab = 'list' }: OffersManageme
     setTab(initialTab);
   }, [initialTab]);
 
-  const partnersId = useMemo(
-    () => (typeof localStorage !== 'undefined' ? localStorage.getItem('repowire_partners_id')?.trim() ?? '' : ''),
-    []
-  );
-
   const loadList = useCallback(async () => {
+    const partnersId = getStoredPartnersId();
     setListLoading(true);
     setListError(null);
     try {
@@ -152,10 +158,21 @@ export default function OffersManagement({ initialTab = 'list' }: OffersManageme
     } finally {
       setListLoading(false);
     }
-  }, [page, search, partnersId]);
+  }, [page, search]);
 
   useEffect(() => {
     void loadList();
+  }, [loadList]);
+
+  useEffect(() => {
+    const handleSessionUpdate = () => {
+      void loadList();
+    };
+
+    window.addEventListener('repowire-session-updated', handleSessionUpdate as EventListener);
+    return () => {
+      window.removeEventListener('repowire-session-updated', handleSessionUpdate as EventListener);
+    };
   }, [loadList]);
 
   const tableColumns = useMemo(() => {
@@ -169,6 +186,7 @@ export default function OffersManagement({ initialTab = 'list' }: OffersManageme
 
   const openDetail = async (offerId: string) => {
     if (!offerId) return;
+    const partnersId = getStoredPartnersId();
     setActiveOfferId(offerId);
     setDetailOpen(true);
     setDetailLoading(true);
@@ -188,6 +206,7 @@ export default function OffersManagement({ initialTab = 'list' }: OffersManageme
 
   const handleDelete = async (offerId: string) => {
     if (!offerId || !window.confirm(`Delete offer ${offerId}? This calls PUT /offer/deleteOffer.`)) return;
+    const partnersId = getStoredPartnersId();
     try {
       await repowireApi.deleteOffer({ offerId, partners_Id: partnersId || undefined });
       setNotice('Offer marked deleted. Refreshing list…');
@@ -198,6 +217,7 @@ export default function OffersManagement({ initialTab = 'list' }: OffersManageme
   };
 
   const submitCreate = async () => {
+    const partnersId = getStoredPartnersId();
     setSubmitting(true);
     setNotice(null);
     try {

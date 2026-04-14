@@ -122,9 +122,21 @@ const parseRecentDate = (row: AnyRecord): string => {
   return new Date().toISOString();
 };
 
-export const hasAuthToken = () => Boolean(localStorage.getItem('repowire_token')?.trim());
+const getStoredToken = () =>
+  (localStorage.getItem('repowire_token')
+    ?? localStorage.getItem('access_token')
+    ?? localStorage.getItem('token')
+    ?? '')
+    .trim();
 
-const getPartnersId = () => localStorage.getItem('repowire_partners_id')?.trim() || '';
+export const hasAuthToken = () => Boolean(getStoredToken());
+
+const getPartnersId = () =>
+  (localStorage.getItem('repowire_partners_id')
+    ?? localStorage.getItem('repowire_partners_Id')
+    ?? localStorage.getItem('partners_Id')
+    ?? '')
+    .trim();
 
 const withPartnersId = (query: Record<string, string | number>) => {
   const partnersId = getPartnersId();
@@ -133,10 +145,17 @@ const withPartnersId = (query: Record<string, string | number>) => {
 };
 
 export async function fetchLiveContacts(): Promise<Contact[]> {
-  const [publishersRaw, advertisersRaw] = await Promise.all([
+  const [publishersRes, advertisersRes] = await Promise.allSettled([
     apiRequest('/publicher/publisherList', { method: 'GET', query: withPartnersId({ page: 1, limit: 200 }) }),
     apiRequest('/advertiser/advertiserList', { method: 'GET', query: withPartnersId({ page: 1, limit: 200 }) }),
   ]);
+
+  const publishersRaw = publishersRes.status === 'fulfilled' ? publishersRes.value : [];
+  const advertisersRaw = advertisersRes.status === 'fulfilled' ? advertisersRes.value : [];
+
+  if (publishersRes.status === 'rejected' && advertisersRes.status === 'rejected') {
+    throw publishersRes.reason;
+  }
 
   const publishers = extractList(publishersRaw).map((item, index) => {
     const row = asObject(item) ?? {};
@@ -174,10 +193,18 @@ export async function fetchLiveContacts(): Promise<Contact[]> {
 }
 
 export async function fetchLiveDeals(): Promise<Deal[]> {
-  const raw = await apiRequest('/offer/offerList', {
-    method: 'GET',
-    query: { page: 1, limit: 200 },
-  });
+  let raw: unknown;
+
+  try {
+    raw = await apiRequest('/offer/allOfferList', {
+      method: 'GET',
+    });
+  } catch {
+    raw = await apiRequest('/offer/offerList', {
+      method: 'GET',
+      query: { page: 1, limit: 200 },
+    });
+  }
 
   return extractList(raw).map((item, index) => {
     const row = asObject(item) ?? {};
@@ -289,13 +316,30 @@ export type LiveReportSnapshot = {
 const palette = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#8B5CF6'];
 
 export async function fetchLiveReportSnapshot(): Promise<LiveReportSnapshot> {
-  const [offers, topPublisherRaw, topOfferRaw, topAdvertiserRaw, totalsRaw] = await Promise.all([
+  const [offersRes, topPublisherRes, topOfferRes, topAdvertiserRes, totalsRes] = await Promise.allSettled([
     fetchLiveDeals(),
     apiRequest('/top/topPublisher', { method: 'GET', query: withPartnersId({}) }),
     apiRequest('/top/topOffer', { method: 'GET', query: withPartnersId({}) }),
     apiRequest('/top/topAdvertiser', { method: 'GET', query: withPartnersId({}) }),
     apiRequest('/conversion/totalRevenue', { method: 'GET', query: withPartnersId({}) }),
   ]);
+
+  const offers = offersRes.status === 'fulfilled' ? offersRes.value : [];
+  const topPublisherRaw = topPublisherRes.status === 'fulfilled' ? topPublisherRes.value : [];
+  const topOfferRaw = topOfferRes.status === 'fulfilled' ? topOfferRes.value : [];
+  const topAdvertiserRaw = topAdvertiserRes.status === 'fulfilled' ? topAdvertiserRes.value : [];
+  const totalsRaw = totalsRes.status === 'fulfilled' ? totalsRes.value : null;
+
+  const hasAnyData =
+    offers.length > 0
+    || extractList(topPublisherRaw).length > 0
+    || extractList(topOfferRaw).length > 0
+    || extractList(topAdvertiserRaw).length > 0
+    || totalsRaw !== null;
+
+  if (!hasAnyData) {
+    throw (offersRes.status === 'rejected' ? offersRes.reason : new Error('No live report data available.'));
+  }
 
   const won = offers.filter((row) => row.stage === 'closed_won').length;
   const lost = offers.filter((row) => row.stage === 'closed_lost').length;

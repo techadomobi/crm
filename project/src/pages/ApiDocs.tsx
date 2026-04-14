@@ -39,6 +39,14 @@ GET /admin/notificationApi
 GET /publicher/publisherList
 GET /advertiser/advertiserList
 GET /offer/offerList
+GET /offer/allOfferList
+GET /report/offerReport
+GET /report/publisherReport
+GET /report/advertiserReport
+GET /report/publishersReport
+GET /report/publisherManagerReport
+GET /report/AffilitesPerformanceReport
+GET /report/advertiserPerformanceReport
 GET /conversion/ConversionList
 GET /conversion/totalConversion
 GET /conversion/totalPayout
@@ -56,6 +64,38 @@ const DEFAULT_PRESET_TEMPLATES: Record<string, EndpointTemplate> = {
   },
   'GET /offer/offerList': {
     query: '{"page": 1, "limit": 50}',
+    body: '{}',
+  },
+  'GET /offer/allOfferList': {
+    query: '{"partners_Id": ""}',
+    body: '{}',
+  },
+  'GET /report/offerReport': {
+    query: '{"partners_Id": "", "startDate": "2026-04-01", "endDate": "2026-04-13"}',
+    body: '{}',
+  },
+  'GET /report/publisherReport': {
+    query: '{"partners_Id": "", "startDate": "2026-04-01", "endDate": "2026-04-13"}',
+    body: '{}',
+  },
+  'GET /report/advertiserReport': {
+    query: '{"partners_Id": "", "startDate": "2026-04-01", "endDate": "2026-04-13"}',
+    body: '{}',
+  },
+  'GET /report/publishersReport': {
+    query: '{"partners_Id": "", "publisherId": "", "startDate": "2026-04-01", "endDate": "2026-04-13"}',
+    body: '{}',
+  },
+  'GET /report/publisherManagerReport': {
+    query: '{"partners_Id": "", "publisherManagerId": "", "startDate": "2026-04-01", "endDate": "2026-04-13"}',
+    body: '{}',
+  },
+  'GET /report/AffilitesPerformanceReport': {
+    query: '{"partners_Id": "", "page": 1, "startDate": "2026-04-01", "endDate": "2026-04-13"}',
+    body: '{}',
+  },
+  'GET /report/advertiserPerformanceReport': {
+    query: '{"partners_Id": "", "advertiser_id": "", "startDate": "2026-04-01", "endDate": "2026-04-13"}',
     body: '{}',
   },
   'GET /publicher/publisherList': {
@@ -205,7 +245,7 @@ export default function ApiDocs() {
   const runUiApiSmokeTests = async () => {
     setIsRunningSmokeTests(true);
     try {
-      const rows = await runSmokeTests();
+      const rows = await runSmokeTests({ scope: 'core' });
       setSmokeResults(rows);
     } finally {
       setIsRunningSmokeTests(false);

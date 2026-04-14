@@ -3,7 +3,7 @@ import { Database, KeyRound, Loader2, PlayCircle } from 'lucide-react';
 import { repowireApi } from '../api/repowireApi';
 import { ApiError } from '../api/httpClient';
 
-type Action = 'publishers' | 'advertisers' | 'conversionSummary' | 'offerList';
+type Action = 'publishers' | 'advertisers' | 'conversionSummary' | 'offerList' | 'campaignList';
 
 export default function BackendApiPanel() {
   const [tokenInput, setTokenInput] = useState(localStorage.getItem('repowire_token') ?? '');
@@ -19,6 +19,7 @@ export default function BackendApiPanel() {
       { id: 'advertisers' as const, label: 'Fetch Advertisers (/advertiser/advertiserList)' },
       { id: 'conversionSummary' as const, label: 'Fetch Conversion Summary (/conversion/*)' },
       { id: 'offerList' as const, label: 'Fetch Offer List (/offer/offerList)' },
+      { id: 'campaignList' as const, label: 'Fetch Campaign List (/offer/allOfferList)' },
     ],
     []
   );
@@ -38,6 +39,7 @@ export default function BackendApiPanel() {
       if (action === 'publishers') response = await repowireApi.publisherList({ page: 1, limit: 10, partners_Id: partnersInput || undefined });
       else if (action === 'advertisers') response = await repowireApi.advertiserList({ page: 1, limit: 10, partners_Id: partnersInput || undefined });
       else if (action === 'conversionSummary') response = await repowireApi.conversionSummary();
+      else if (action === 'campaignList') response = await repowireApi.campaignList({ partners_Id: partnersInput || undefined });
       else {
         const page = Number(offerListQuery.page);
         response = await repowireApi.offerList({
@@ -101,6 +103,7 @@ export default function BackendApiPanel() {
             const cleaned = tokenInput.trim().replace(/^['"]+|['"]+$/g, '').replace(/^Bearer\s+/i, '');
             localStorage.setItem('repowire_token', cleaned);
             localStorage.setItem('repowire_partners_id', partnersInput.trim());
+            window.dispatchEvent(new Event('repowire-session-updated'));
             setTokenInput(cleaned);
             setError(null);
           }}
