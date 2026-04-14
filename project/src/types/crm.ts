@@ -46,4 +46,13 @@ export interface DashboardOverview {
   pipelineStages: Array<{ stage: string; count: number }>;
   revenueSeries: Array<{ label: string; value: number }>;
   upcomingTasks: ActivityRecord[];
+  liveSummary?: {
+    clicks: number;
+    conversions: number;
+    impressions: number;
+    events: number;
+    revenue: number;
+    payout: number;
+    profit: number;
+  };
 }

@@ -32,6 +32,7 @@ const pageTitles: Partial<Record<NavPage, { title: string; subtitle: string }>> 
   apiDocs: { title: 'API Docs', subtitle: 'Swagger-backed endpoint reference and usage examples' },
   apiStudio: { title: 'API Studio', subtitle: 'Execute every OffersMeta v2 operation — JSON, raw, and file responses' },
   apiHealth: { title: 'API Health', subtitle: 'Live endpoint availability and auth diagnostics.' },
+  profile: { title: 'Profile', subtitle: 'Live account details and authenticated session profile.' },
   settings: { title: 'Global Settings', subtitle: 'Manage platform configuration and API session values.' },
 };
 

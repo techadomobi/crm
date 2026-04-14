@@ -1,6 +1,9 @@
 import type { DashboardOverview } from '../types/crm';
+import { repowireApi } from '../api/repowireApi';
+import { apiRequest } from '../api/httpClient';
 import { fetchLiveActivities, fetchLiveContacts, fetchLiveDeals } from '../api/liveDataAdapters';
 import { leadsService } from './leads';
+import type { RangeKey } from '../hooks/useDashboardRangeMetrics';
 
 const monthKey = (date: Date) => `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
@@ -9,6 +12,90 @@ const toIsoDay = (value: string | undefined) => {
   if (!value) return '';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
+};
+
+const toNumber = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(/[^\d.-]/g, ''));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+type NumberCandidate = { path: string; value: number };
+
+const collectNumberCandidates = (value: unknown, path = '', depth = 0): NumberCandidate[] => {
+  if (depth > 5 || value === null || value === undefined) return [];
+
+  const direct = toNumber(value);
+  if (direct > 0) {
+    const normalizedPath = path.toLowerCase();
+    if (!normalizedPath.includes('status') && !normalizedPath.includes('code') && !normalizedPath.includes('message')) {
+      return [{ path, value: direct }];
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => collectNumberCandidates(item, `${path}[${index}]`, depth + 1));
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.entries(record).flatMap(([key, nested]) => {
+      const nextPath = path ? `${path}.${key}` : key;
+      return collectNumberCandidates(nested, nextPath, depth + 1);
+    });
+  }
+
+  return [];
+};
+
+const extractMetric = (value: unknown, preferredKeys: string[] = []): number => {
+  const candidates = collectNumberCandidates(value);
+  if (candidates.length === 0) return 0;
+
+  const preferred = candidates.filter((candidate) => preferredKeys.some((key) => candidate.path.toLowerCase().includes(key.toLowerCase())));
+  const preferredPositive = preferred.filter((candidate) => candidate.value > 0);
+  if (preferredPositive.length > 0) {
+    return preferredPositive.sort((a, b) => b.value - a.value)[0].value;
+  }
+
+  const positive = candidates.filter((candidate) => candidate.value > 0);
+  if (positive.length > 0) {
+    return positive.sort((a, b) => b.value - a.value)[0].value;
+  }
+
+  return candidates[0].value;
+};
+
+const readPartnersId = () =>
+  (localStorage.getItem('repowire_partners_id')
+    ?? localStorage.getItem('repowire_partners_Id')
+    ?? localStorage.getItem('partners_Id')
+    ?? '').trim();
+
+const rangeDates = (range: RangeKey) => {
+  const now = new Date();
+  const start = new Date(now);
+  const end = new Date(now);
+
+  if (range === 'yesterday') {
+    start.setDate(start.getDate() - 1);
+    end.setDate(end.getDate() - 1);
+  } else if (range === 'lastWeek') {
+    start.setDate(start.getDate() - 6);
+  } else if (range === 'thisMonth') {
+    start.setDate(1);
+  } else if (range === 'lastMonth') {
+    start.setMonth(start.getMonth() - 1, 1);
+    end.setDate(0);
+  }
+
+  return {
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  };
 };
 
 const buildRevenueSeries = (deals: Array<{ value: number; createdAt: string }>) => {
@@ -63,18 +150,57 @@ const buildRevenueSeries = (deals: Array<{ value: number; createdAt: string }>) 
 };
 
 export const dashboardService = {
+  async rangeSummary(range: RangeKey) {
+    const partnersId = readPartnersId();
+    const { startDate, endDate } = rangeDates(range);
+    const rangeQuery = { startDate, endDate };
+
+    const [conversionResult, payoutResult, revenueResult, profitResult, clicksResult, eventsResult, impressionsResult] = await Promise.allSettled([
+      apiRequest('/conversion/totalConversion', { method: 'GET', query: rangeQuery }),
+      apiRequest('/conversion/totalPayout', { method: 'GET', query: rangeQuery }),
+      apiRequest('/conversion/totalRevenue', { method: 'GET', query: rangeQuery }),
+      apiRequest('/conversion/totalProfit', { method: 'GET', query: rangeQuery }),
+      apiRequest('/tracking/totalClick', { method: 'GET', query: partnersId ? { ...rangeQuery, partners_Id: partnersId } : rangeQuery }),
+      apiRequest('/conversion/totalEvent', { method: 'GET', query: rangeQuery }),
+      apiRequest('/impression/totalImpression', { method: 'GET', query: partnersId ? { partners_Id: partnersId, startDate, endDate } : { startDate, endDate } }),
+    ]);
+
+    return {
+      clicks: clicksResult.status === 'fulfilled' ? extractMetric(clicksResult.value, ['click']) : 0,
+      conversions: conversionResult.status === 'fulfilled' ? extractMetric(conversionResult.value, ['conversion']) : 0,
+      impressions: impressionsResult.status === 'fulfilled' ? extractMetric(impressionsResult.value, ['impression']) : 0,
+      events: eventsResult.status === 'fulfilled' ? extractMetric(eventsResult.value, ['event']) : 0,
+      revenue: revenueResult.status === 'fulfilled' ? extractMetric(revenueResult.value, ['revenue']) : 0,
+      payout: payoutResult.status === 'fulfilled' ? extractMetric(payoutResult.value, ['payout']) : 0,
+      profit: profitResult.status === 'fulfilled' ? extractMetric(profitResult.value, ['profit']) : 0,
+    };
+  },
+
   async overview(): Promise<DashboardOverview> {
-    const [contactsResult, dealsResult, leadsResult, activitiesResult] = await Promise.allSettled([
+    const partnersId = readPartnersId();
+    const [contactsResult, dealsResult, leadsResult, activitiesResult, summaryResult, clicksResult, eventsResult, impressionsResult] = await Promise.allSettled([
       fetchLiveContacts(),
       fetchLiveDeals(),
       leadsService.listPipeline({ page: 1, limit: 100 }),
       fetchLiveActivities(),
+      repowireApi.conversionSummary(),
+      apiRequest('/tracking/totalClick', { method: 'GET', query: partnersId ? { partners_Id: partnersId } : undefined }),
+      apiRequest('/conversion/totalEvent', { method: 'GET' }),
+      apiRequest('/impression/totalImpression', { method: 'GET', query: partnersId ? { partners_Id: partnersId } : undefined }),
     ]);
 
     const contacts = contactsResult.status === 'fulfilled' ? contactsResult.value : [];
     const deals = dealsResult.status === 'fulfilled' ? dealsResult.value : [];
     const leads = leadsResult.status === 'fulfilled' ? leadsResult.value : [];
     const activities = activitiesResult.status === 'fulfilled' ? activitiesResult.value : [];
+    const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : null;
+    const liveClicks = clicksResult.status === 'fulfilled' ? extractMetric(clicksResult.value, ['click']) : 0;
+    const liveEvents = eventsResult.status === 'fulfilled' ? extractMetric(eventsResult.value, ['event']) : 0;
+    const liveImpressions = impressionsResult.status === 'fulfilled' ? extractMetric(impressionsResult.value, ['impression']) : 0;
+    const liveConversions = summary ? extractMetric(summary.totalConversion, ['conversion']) : 0;
+    const liveRevenue = summary ? extractMetric(summary.totalRevenue, ['revenue']) : 0;
+    const livePayout = summary ? extractMetric(summary.totalPayout, ['payout']) : 0;
+    const liveProfit = summary ? extractMetric(summary.totalProfit, ['profit']) : 0;
 
     const currentMonth = monthKey(new Date());
     const leadsThisMonth = leads.filter((lead) => {
@@ -156,6 +282,15 @@ export const dashboardService = {
       pipelineStages: Array.from(pipelineStageCounts.entries()).map(([stage, count]) => ({ stage, count })),
       revenueSeries,
       upcomingTasks,
+      liveSummary: {
+        clicks: liveClicks,
+        conversions: liveConversions,
+        impressions: liveImpressions,
+        events: liveEvents,
+        revenue: liveRevenue,
+        payout: livePayout,
+        profit: liveProfit,
+      },
     };
   },
 };

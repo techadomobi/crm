@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   SignalHigh,
   Settings,
+  UserCircle,
   UserRoundCog,
   Users,
   Workflow,
@@ -49,6 +50,7 @@ const navItems: SidebarNode[] = [
   { id: 'publishersManage', label: 'Managers', icon: <UserRoundCog size={19} /> },
   { id: 'integration', label: 'Integrations', icon: <Link2 size={19} /> },
   { id: 'apiHealth', label: 'API Health', icon: <HeartPulse size={19} /> },
+  { id: 'profile', label: 'Profile', icon: <UserCircle size={19} /> },
   { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
 ];
 

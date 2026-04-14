@@ -4,6 +4,7 @@ import RevenueChart from '../components/RevenueChart';
 import RoleDashboardsPanel from '../components/RoleDashboardsPanel';
 import { useDashboardOverview } from '../hooks/useDashboardOverview';
 import { RangeKey, useDashboardRangeMetrics } from '../hooks/useDashboardRangeMetrics';
+import { useDashboardRangeSummary } from '../hooks/useDashboardRangeSummary';
 
 const formatCurrency = (value: number) => {
   return `$${value.toLocaleString()}`;
@@ -91,6 +92,7 @@ const rangeSubtitle: Record<RangeKey, string> = {
 export default function Dashboard({ displayName, displayEmail }: DashboardProps) {
   const [range, setRange] = useState<RangeKey>('today');
   const { data, isLoading, isError, error } = useDashboardOverview();
+  const { data: rangeSummary, isLoading: rangeSummaryLoading, isError: rangeSummaryError } = useDashboardRangeSummary(range);
   const { rangeMetrics, rangeLoading, rangeError } = useDashboardRangeMetrics(range, {
     liveDeals: data?.liveDeals,
     liveActivities: data?.liveActivities,
@@ -121,15 +123,17 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
     ? rangeMetrics.pipeline
     : data.pipelineStages;
 
+  const liveSummary = data.liveSummary;
+
   const kpis = (() => {
-    const conversions = rangeMetrics?.conversions ?? data.pipelineStages.reduce((sum, stage) => sum + stage.count, 0);
-    const clicks = rangeMetrics?.clicks ?? 0;
-    const impressions = rangeMetrics?.impressions ?? 0;
+    const conversions = rangeSummary?.conversions ?? liveSummary?.conversions ?? rangeMetrics?.conversions ?? data.pipelineStages.reduce((sum, stage) => sum + stage.count, 0);
+    const clicks = rangeSummary?.clicks ?? liveSummary?.clicks ?? rangeMetrics?.clicks ?? 0;
+    const impressions = rangeSummary?.impressions ?? liveSummary?.impressions ?? rangeMetrics?.impressions ?? 0;
     const cr = clicks > 0 ? `${((conversions / clicks) * 100).toFixed(2)}%` : '0.00%';
-    const events = rangeMetrics?.events ?? data.activitiesDueToday;
-    const revenue = rangeMetrics?.revenue ?? Math.max(data.openDealsValue, 0);
-    const payout = rangeMetrics?.payout ?? 0;
-    const profit = rangeMetrics?.profit ?? (revenue - payout);
+    const events = rangeSummary?.events ?? liveSummary?.events ?? rangeMetrics?.events ?? data.activitiesDueToday;
+    const revenue = rangeSummary?.revenue ?? liveSummary?.revenue ?? rangeMetrics?.revenue ?? Math.max(data.openDealsValue, 0);
+    const payout = rangeSummary?.payout ?? liveSummary?.payout ?? rangeMetrics?.payout ?? 0;
+    const profit = rangeSummary?.profit ?? liveSummary?.profit ?? rangeMetrics?.profit ?? (revenue - payout);
 
     return [
       { label: 'Clicks', value: String(clicks), trend: 'Live', icon: <MousePointerClick size={18} /> },
@@ -192,9 +196,9 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
         </div>
       </div>
 
-      {(rangeLoading || rangeError) && (
+      {(rangeLoading || rangeError || rangeSummaryLoading || rangeSummaryError) && (
         <div className={`rounded-xl border px-4 py-2.5 text-sm ${rangeError ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-cyan-200 bg-cyan-50 text-cyan-900'}`}>
-          {rangeLoading ? 'Loading real data for selected range...' : rangeError}
+          {rangeLoading || rangeSummaryLoading ? 'Loading real data for selected range...' : (rangeError || rangeSummaryError || 'Unable to load range summary.')}
         </div>
       )}
 

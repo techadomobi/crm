@@ -13,6 +13,7 @@ import OffersManagement from './pages/OffersManagement';
 import CampaignsList from './pages/CampaignsList';
 import CampaignModulesWorkspace from './pages/CampaignModulesWorkspace';
 import ApiModuleWorkbench from './pages/ApiModuleWorkbench';
+import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import AuthPortal from './pages/AuthPortal';
 import { NavPage } from './types';
@@ -39,6 +40,7 @@ const routeToPage: Record<string, NavPage> = {
   '/dashboard/manager': 'publishersManage',
   '/dashboard/integrations': 'integration',
   '/dashboard/settings': 'settings',
+  '/profile': 'profile',
   '/contacts': 'contacts',
   '/deals': 'deals',
   '/activities': 'activities',
@@ -81,13 +83,13 @@ const pageToRoute: Partial<Record<NavPage, string>> = {
   publishersManage: '/dashboard/manager',
   integration: '/dashboard/integrations',
   settings: '/dashboard/settings',
+  profile: '/profile',
   deals: '/deals',
   activities: '/activities',
   apiDocs: '/api/docs',
   apiStudio: '/api/studio',
   apiHealth: '/api/health',
   createCampaign: '/campaigns/create',
-  campaignsReport: '/reports/campaigns',
   publishersReport: '/reports/publishers',
   advertisersReport: '/reports/advertisers',
   dailyReport: '/reports/daily',
@@ -159,6 +161,7 @@ const allNavPages: NavPage[] = [
   'smartLink',
   'notifications',
   'support',
+  'profile',
   'apiDocs',
   'apiStudio',
   'apiHealth',
@@ -457,6 +460,7 @@ export default function App() {
       case 'apiDocs': return <ApiDocs />;
       case 'apiStudio': return <ApiStudio />;
       case 'apiHealth': return <ApiHealth />;
+      case 'profile': return <Profile displayName={displayName} displayEmail={displayEmail} displayRole={displayRole} />;
       case 'manageCampaigns': return <OffersManagement initialTab="list" />;
       case 'createCampaign': return <OffersManagement initialTab="create" />;
       case 'settings': return <Settings displayName={displayName} displayEmail={displayEmail} displayRole={displayRole} />;

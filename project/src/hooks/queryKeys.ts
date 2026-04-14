@@ -10,4 +10,5 @@ export const queryKeys = {
   notifications: ['notifications'] as const,
   settings: ['settings'] as const,
   dashboardOverview: ['dashboard-overview'] as const,
+  dashboardRangeSummary: (range: string) => ['dashboard-range-summary', range] as const,
 };
