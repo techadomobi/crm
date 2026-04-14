@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { affiliatesService, type AffiliateRecord } from '../services/affiliates';
 
+const hasAuthToken = () => {
+  const token =
+    localStorage.getItem('repowire_token')
+    ?? localStorage.getItem('access_token')
+    ?? localStorage.getItem('token')
+    ?? '';
+  return Boolean(token.trim());
+};
+
 interface UseAffiliatesOptions {
   type?: 'publishers' | 'advertisers';
   page?: number;
@@ -20,6 +29,10 @@ export function useAffiliates(options: UseAffiliatesOptions = {}) {
     setError(null);
 
     try {
+      if (!hasAuthToken()) {
+        throw new Error('Save a valid bearer token and login to load live API data.');
+      }
+
       const type = options.type ?? 'publishers';
       const page = options.page ?? 1;
       const limit = options.limit ?? 50;

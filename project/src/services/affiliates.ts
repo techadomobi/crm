@@ -15,12 +15,55 @@ export interface AffiliateRecord {
 const extractList = (response: unknown): unknown[] => {
   if (!response) return [];
   if (Array.isArray(response)) return response;
+
+  if (typeof response !== 'object') return [];
   const obj = response as Record<string, unknown>;
-  if (Array.isArray(obj.data)) return obj.data;
-  if (Array.isArray(obj.result)) return obj.result;
-  if (Array.isArray(obj.publishers)) return obj.publishers;
-  if (Array.isArray(obj.records)) return obj.records;
+  const keys = ['data', 'result', 'rows', 'items', 'list', 'records', 'docs', 'publishers', 'advertisers', 'payload'];
+
+  for (const key of keys) {
+    const candidate = obj[key];
+    if (Array.isArray(candidate)) return candidate;
+    if (candidate && typeof candidate === 'object') {
+      const nested = extractList(candidate);
+      if (nested.length > 0) return nested;
+    }
+  }
+
+  for (const value of Object.values(obj)) {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object') {
+      const nested = extractList(value);
+      if (nested.length > 0) return nested;
+    }
+  }
+
   return [];
+};
+
+const extractErrorMessage = (response: unknown): string | null => {
+  if (!response || typeof response !== 'object') return null;
+  const obj = response as Record<string, unknown>;
+  const candidates = [obj.message, obj.error, obj.msg, obj.responseMessage, obj.detail, obj.reason];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      const text = candidate.trim();
+      const lower = text.toLowerCase();
+      if (
+        lower.includes('invalid')
+        || lower.includes('unauthorized')
+        || lower.includes('forbidden')
+        || lower.includes('required')
+        || lower.includes('not found')
+        || lower.includes('failed')
+        || lower.includes('error')
+      ) {
+        return text;
+      }
+    }
+  }
+
+  return null;
 };
 
 const toString = (val: unknown): string => {
@@ -48,6 +91,8 @@ const requestListWithVariants = async (path: string, baseQuery: Record<string, s
   ];
 
   const seen = new Set<string>();
+  let lastErrorMessage: string | null = null;
+
   for (const query of variants) {
     const key = JSON.stringify(query);
     if (seen.has(key)) continue;
@@ -60,6 +105,15 @@ const requestListWithVariants = async (path: string, baseQuery: Record<string, s
 
     const list = extractList(response);
     if (list.length > 0) return list;
+
+    const responseError = extractErrorMessage(response);
+    if (responseError) {
+      lastErrorMessage = responseError;
+    }
+  }
+
+  if (lastErrorMessage) {
+    throw new Error(lastErrorMessage);
   }
 
   return [];

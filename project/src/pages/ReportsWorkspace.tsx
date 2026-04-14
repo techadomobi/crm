@@ -641,6 +641,15 @@ export default function ReportsWorkspace({ initialView = 'summary' }: ReportsWor
           Report endpoint preview failed to load. Use the filters above, verify token/partners_Id in Settings, and try a specific endpoint tab.
         </div>
       )}
+
+      {!isSummaryView && reportQueryResult.isError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 flex items-center gap-2">
+          <AlertCircle size={14} />
+          {reportQueryResult.error instanceof Error
+            ? `API Error: ${reportQueryResult.error.message}`
+            : 'API Error: failed to load report rows from live endpoints.'}
+        </div>
+      )}
     </div>
   );
 }

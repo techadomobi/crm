@@ -14,6 +14,14 @@ export const notificationsService = {
     const postbackRows = postbacks.status === 'fulfilled' ? asArray<Record<string, unknown>>(postbacks.value) : [];
     const conversionRows = conversions.status === 'fulfilled' ? asArray<Record<string, unknown>>(conversions.value) : [];
 
+    if (postbackRows.length === 0 && conversionRows.length === 0) {
+      const postbackError = postbacks.status === 'rejected' ? postbacks.reason : null;
+      const conversionError = conversions.status === 'rejected' ? conversions.reason : null;
+      const reason = postbackError ?? conversionError;
+      if (reason instanceof Error) throw reason;
+      throw new Error('No notification data returned by postback/conversion APIs.');
+    }
+
     const merged = [
       ...postbackRows.map((row, index) => ({
         id: String(row._id || row.id || row.postbackId || `postback-${index}`),
