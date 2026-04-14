@@ -134,6 +134,14 @@ const buildRangeFallbackSeries = (range: RangeKey, totalRevenue: number) => {
   });
 };
 
+const hasVisibleVariation = (series: Array<{ month: string; value: number }>) => {
+  if (series.length <= 1) return true;
+  const values = series.map((point) => point.value);
+  const hasAnyPositive = values.some((value) => value > 0);
+  const distinctValues = new Set(values);
+  return hasAnyPositive && distinctValues.size > 1;
+};
+
 export default function Dashboard({ displayName, displayEmail }: DashboardProps) {
   const [range, setRange] = useState<RangeKey>('today');
   const { data, isLoading, isError, error } = useDashboardOverview();
@@ -160,16 +168,21 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
     value: point.value,
   }));
 
+  const liveSummary = data.liveSummary;
+
   const rangeRevenueTotal = rangeSummary?.revenue ?? liveSummary?.revenue ?? data.openDealsValue;
-  const revenueData = rangeMetrics?.chart.length
-    ? rangeMetrics.chart
-    : buildRangeFallbackSeries(range, rangeRevenueTotal > 0 ? rangeRevenueTotal : fallbackRevenueData.reduce((sum, point) => sum + point.value, 0));
+  const liveRangeChart = rangeMetrics?.chart ?? [];
+  const revenueSeriesCandidate = hasVisibleVariation(liveRangeChart)
+    ? liveRangeChart
+    : buildRangeFallbackSeries(
+        range,
+        rangeRevenueTotal > 0 ? rangeRevenueTotal : fallbackRevenueData.reduce((sum, point) => sum + point.value, 0)
+      );
+  const revenueData = revenueSeriesCandidate;
 
   const pipelineData = rangeMetrics?.pipeline.length
     ? rangeMetrics.pipeline
     : data.pipelineStages;
-
-  const liveSummary = data.liveSummary;
 
   const kpis = (() => {
     const conversions = rangeSummary?.conversions ?? liveSummary?.conversions ?? rangeMetrics?.conversions ?? data.pipelineStages.reduce((sum, stage) => sum + stage.count, 0);
