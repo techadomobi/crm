@@ -203,8 +203,9 @@ const fetchWithFallback = async (path: string, url: string, directUrl: string, r
     const response = await fetch(url, requestInit);
     const method = String(requestInit.method ?? 'GET').toUpperCase();
     const isSafeRead = method === 'GET' || method === 'HEAD';
+    const shouldRetryDirect = isSafeRead || isAuthPath(path);
 
-    if (isSafeRead && [404, 502, 503].includes(response.status)) {
+    if (shouldRetryDirect && [404, 502, 503].includes(response.status)) {
       try {
         return await fetch(directUrl, requestInit);
       } catch {
