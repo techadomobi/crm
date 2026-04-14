@@ -20,6 +20,20 @@ const toPathname = (input: string | string[] | undefined) => {
   return `/${input}`;
 };
 
+const resolveProxyPathname = (req: VercelRequest) => {
+  const fromQuery = toPathname(req.query.path);
+  if (fromQuery !== '/') return fromQuery;
+
+  const rawUrl = String(req.url ?? '');
+  const withoutQuery = rawUrl.split('?')[0] ?? '';
+  const normalized = withoutQuery.startsWith('/api/proxy')
+    ? withoutQuery.slice('/api/proxy'.length)
+    : withoutQuery;
+
+  if (!normalized || normalized === '/') return '/';
+  return normalized.startsWith('/') ? normalized : `/${normalized}`;
+};
+
 const buildUpstreamBody = (req: VercelRequest): BodyInit | undefined => {
   if (['GET', 'HEAD'].includes(req.method ?? 'GET')) return undefined;
 
@@ -66,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const upstreamUrl = new URL(`${UPSTREAM_BASE_URL}${toPathname(req.query.path)}`);
+  const upstreamUrl = new URL(`${UPSTREAM_BASE_URL}${resolveProxyPathname(req)}`);
 
   Object.entries(req.query).forEach(([key, value]) => {
     if (key === 'path') return;
