@@ -193,7 +193,19 @@ const isNetworkFetchError = (error: unknown) =>
 
 const fetchWithFallback = async (path: string, url: string, directUrl: string, requestInit: RequestInit) => {
   try {
-    return await fetch(url, requestInit);
+    const response = await fetch(url, requestInit);
+    const method = String(requestInit.method ?? 'GET').toUpperCase();
+    const isSafeRead = method === 'GET' || method === 'HEAD';
+
+    if (isSafeRead && [404, 502, 503].includes(response.status)) {
+      try {
+        return await fetch(directUrl, requestInit);
+      } catch {
+        return response;
+      }
+    }
+
+    return response;
   } catch (error) {
     const method = String(requestInit.method ?? 'GET').toUpperCase();
     const isSafeRead = method === 'GET' || method === 'HEAD';
