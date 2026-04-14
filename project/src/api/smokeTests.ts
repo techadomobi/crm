@@ -1,4 +1,5 @@
 import { apiRequest, ApiError, type RequestMethod } from './httpClient';
+import { hasAuthToken } from './liveDataAdapters';
 import { defaultSkipAuthForPath, flattenSwaggerOperations, type SwaggerOperation } from '../lib/offersmetaSwagger';
 import { loadSwaggerSpec } from '../services/swaggerSpecService';
 
@@ -209,11 +210,13 @@ const buildTestsFromSwagger = async (includeMutations: boolean): Promise<{ tests
   const { spec, sourceUrl } = await loadSwaggerSpec();
   const operations = flattenSwaggerOperations(spec);
   const tests: TestCase[] = [];
+  const authConfigured = hasAuthToken();
 
   for (const op of operations) {
     const isAuthEndpoint = /\/(login|signup|singleLogin)$/i.test(op.path);
     const isReadOnly = op.method === 'GET';
     const canExecute = includeMutations ? true : (isReadOnly || isAuthEndpoint);
+    const protectedEndpoint = op.secured && !defaultSkipAuthForPath(op.path) && !isAuthEndpoint;
 
     if (!canExecute) {
       tests.push({
@@ -222,6 +225,17 @@ const buildTestsFromSwagger = async (includeMutations: boolean): Promise<{ tests
         method: op.method,
         executable: false,
         skipReason: 'Skipped write endpoint (enable "Include write endpoints" to execute).',
+      });
+      continue;
+    }
+
+    if (protectedEndpoint && !authConfigured) {
+      tests.push({
+        name: testNameFromOperation(op),
+        endpoint: resolveEndpointPath(op.path),
+        method: op.method,
+        executable: false,
+        skipReason: 'Skipped protected endpoint because no bearer token is configured.',
       });
       continue;
     }
