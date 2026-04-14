@@ -89,6 +89,51 @@ const rangeSubtitle: Record<RangeKey, string> = {
   lastMonth: 'Last month',
 };
 
+const buildRangeAxis = (range: RangeKey) => {
+  const now = new Date();
+  const end = new Date(now);
+  const start = new Date(now);
+
+  if (range === 'yesterday') {
+    start.setDate(start.getDate() - 1);
+    end.setDate(end.getDate() - 1);
+  } else if (range === 'lastWeek') {
+    start.setDate(start.getDate() - 6);
+  } else if (range === 'thisMonth') {
+    start.setDate(1);
+  } else if (range === 'lastMonth') {
+    start.setMonth(start.getMonth() - 1, 1);
+    end.setDate(0);
+  }
+
+  const axis: string[] = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    axis.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return axis.length > 0 ? axis : [new Date().toISOString().slice(0, 10)];
+};
+
+const buildRangeFallbackSeries = (range: RangeKey, totalRevenue: number) => {
+  const axis = buildRangeAxis(range);
+  const count = axis.length;
+  const baseValue = Math.max(totalRevenue, 0);
+
+  if (count === 1) {
+    return [{ month: new Date(axis[0]).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), value: baseValue }];
+  }
+
+  return axis.map((dayKey, index) => {
+    const date = new Date(`${dayKey}T00:00:00Z`);
+    const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const progress = (index + 1) / count;
+    const value = baseValue > 0 ? Math.round(baseValue * progress) : 0;
+    return { month: label, value };
+  });
+};
+
 export default function Dashboard({ displayName, displayEmail }: DashboardProps) {
   const [range, setRange] = useState<RangeKey>('today');
   const { data, isLoading, isError, error } = useDashboardOverview();
@@ -115,9 +160,10 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
     value: point.value,
   }));
 
+  const rangeRevenueTotal = rangeSummary?.revenue ?? liveSummary?.revenue ?? data.openDealsValue;
   const revenueData = rangeMetrics?.chart.length
     ? rangeMetrics.chart
-    : fallbackRevenueData;
+    : buildRangeFallbackSeries(range, rangeRevenueTotal > 0 ? rangeRevenueTotal : fallbackRevenueData.reduce((sum, point) => sum + point.value, 0));
 
   const pipelineData = rangeMetrics?.pipeline.length
     ? rangeMetrics.pipeline
