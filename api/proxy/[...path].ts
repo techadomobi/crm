@@ -96,7 +96,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     method: req.method,
     headers: requestHeaders,
     body: buildUpstreamBody(req),
-    duplex: 'half',
   });
 
   res.status(upstreamResponse.status);
