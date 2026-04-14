@@ -337,6 +337,37 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  const clearPersistedSession = (message: string) => {
+    localStorage.removeItem('repowire_token');
+    localStorage.removeItem('repowire_partners_id');
+    localStorage.removeItem('repowire_auth_source');
+    localStorage.removeItem('repowire_last_auth_mode');
+    localStorage.removeItem(USER_NAME_KEY);
+    localStorage.removeItem(USER_EMAIL_KEY);
+    localStorage.removeItem(USER_ROLE_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    window.history.pushState({}, '', '/');
+    setIsAuthenticated(false);
+    setActivePage(getPageFromPath('/'));
+    setAuthMode('login');
+    setAuthError(message);
+    setDisplayName('');
+    setDisplayEmail('');
+    setDisplayRole('User');
+  };
+
+  useEffect(() => {
+    const onSessionInvalid = (event: Event) => {
+      const customEvent = event as CustomEvent<{ status?: number; path?: string }>;
+      const status = customEvent.detail?.status ?? 401;
+      const path = customEvent.detail?.path ?? 'API request';
+      clearPersistedSession(`Your session expired or is unauthorized (${status}) after calling ${path}. Please sign in again and save a valid token.`);
+    };
+
+    window.addEventListener('repowire:session-invalid', onSessionInvalid as EventListener);
+    return () => window.removeEventListener('repowire:session-invalid', onSessionInvalid as EventListener);
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -831,6 +862,12 @@ export default function App() {
         }`}
       >
         <div className="p-4 sm:p-6 max-w-[1600px]">
+          {authError && isAuthenticated && (
+            <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 shadow-sm">
+              <div className="font-semibold">Session issue</div>
+              <div className="mt-1">{authError}</div>
+            </div>
+          )}
           {renderPage()}
         </div>
       </main>

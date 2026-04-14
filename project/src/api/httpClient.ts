@@ -191,6 +191,13 @@ const buildApiFetchInit = (path: string, options: ApiRequestOptions = {}) => {
 const isNetworkFetchError = (error: unknown) =>
   error instanceof TypeError && /failed to fetch|networkerror|load failed/i.test(error.message);
 
+const emitSessionInvalid = (status: number, path: string) => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('repowire:session-invalid', {
+    detail: { status, path },
+  }));
+};
+
 const fetchWithFallback = async (path: string, url: string, directUrl: string, requestInit: RequestInit) => {
   try {
     const response = await fetch(url, requestInit);
@@ -275,6 +282,9 @@ export async function apiExecute(path: string, options: ApiRequestOptions = {}):
 
   if (!response.ok) {
     const data = await readErrorPayload();
+    if (![true].includes(Boolean((options.skipAuth ?? false))) && [401, 403].includes(response.status)) {
+      emitSessionInvalid(response.status, path);
+    }
     throw new ApiError(`Request failed with status ${response.status}`, response.status, data);
   }
 
@@ -318,6 +328,9 @@ export async function apiRequest<T = unknown>(path: string, options: ApiRequestO
   }
 
   if (!response.ok) {
+    if (![true].includes(Boolean((options.skipAuth ?? false))) && [401, 403].includes(response.status)) {
+      emitSessionInvalid(response.status, path);
+    }
     throw new ApiError(`Request failed with status ${response.status}`, response.status, data);
   }
 
