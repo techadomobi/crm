@@ -16,6 +16,8 @@ import ApiModuleWorkbench from './pages/ApiModuleWorkbench';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import AuthPortal from './pages/AuthPortal';
+import Affiliates from './pages/Affiliates';
+import Advertisers from './pages/Advertisers';
 import { NavPage } from './types';
 import { AdminLoginPayload, AuthAccountType, repowireApi, SignupPayload } from './api/repowireApi';
 import { ApiError } from './api/httpClient';
@@ -30,7 +32,8 @@ const routeToPage: Record<string, NavPage> = {
   '/dashboard': 'dashboard',
   '/dashboard/campaigns': 'campaigns',
   '/dashboard/request-offers': 'manageCampaigns',
-  '/dashboard/affiliates': 'contacts',
+  '/dashboard/affiliates': 'affiliates',
+  '/dashboard/affiliate': 'affiliates',
   '/dashboard/postback': 'postbackLogs',
   '/dashboard/advertiser': 'advertisers',
   '/dashboard/performance': 'reports',
@@ -52,6 +55,9 @@ const routeToPage: Record<string, NavPage> = {
   '/campaigns': 'campaigns',
   '/campaigns/manage': 'manageCampaigns',
   '/campaigns/create': 'createCampaign',
+  '/affiliates': 'affiliates',
+  '/affiliate': 'affiliates',
+  '/affiliates/publishers': 'publishers',
   '/reports/campaigns': 'campaignsReport',
   '/reports/publishers': 'publishersReport',
   '/reports/advertisers': 'advertisersReport',
@@ -74,6 +80,8 @@ const pageToRoute: Partial<Record<NavPage, string>> = {
   campaigns: '/dashboard/campaigns',
   manageCampaigns: '/dashboard/request-offers',
   contacts: '/dashboard/affiliates',
+  affiliates: '/dashboard/affiliate',
+  publishers: '/affiliates/publishers',
   postbackLogs: '/dashboard/postback',
   advertisers: '/dashboard/advertiser',
   reports: '/dashboard/performance',
@@ -132,9 +140,10 @@ const allNavPages: NavPage[] = [
   'postbackLogs',
   'recentExports',
   'contacts',
+  'affiliates',
+  'publishers',
   'deals',
   'activities',
-  'publishers',
   'publishersManage',
   'publishersPostbackPixels',
   'advertisers',
@@ -470,6 +479,9 @@ export default function App() {
       case 'bulkTargeting':
         return <CampaignModulesWorkspace activePage={activePage} />;
       case 'contacts': return <Contacts />;
+      case 'affiliates': return <Affiliates />;
+      case 'publishers': return <Affiliates />;
+      case 'advertisers': return <Advertisers />;
       case 'deals': return <Deals />;
       case 'activities': return <Activities />;
       case 'reports': return <ReportsWorkspace key="reports" initialView="summary" />;
