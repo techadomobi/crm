@@ -47,7 +47,7 @@ export default function AuthPortal({ mode, onModeChange, onAuthenticate, authErr
   const passwordStrength = getPasswordStrength(password);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-auth-grid px-4 py-8 sm:px-8">
+    <div className="home-hero-motion relative min-h-screen overflow-hidden bg-auth-grid px-4 py-8 sm:px-8">
       <div className="pointer-events-none absolute -left-24 -top-20 h-64 w-64 rounded-full bg-cyan-200/40 blur-3xl" />
       <div className="pointer-events-none absolute right-0 top-20 h-80 w-80 rounded-full bg-sky-300/30 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-teal-200/30 blur-3xl" />

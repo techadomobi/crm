@@ -904,7 +904,7 @@ export default function App() {
         displayRole={displayRole}
       />
       <main
-        className={`transition-all duration-300 pt-24 lg:pt-20 min-h-screen pl-0 ${
+        className={`transition-[padding-left] duration-150 pt-24 lg:pt-20 min-h-screen pl-0 ${
           sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-60'
         }`}
       >
