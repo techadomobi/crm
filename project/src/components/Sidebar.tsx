@@ -66,12 +66,12 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle, m
         type="button"
         aria-label="Close sidebar"
         onClick={onCloseMobile}
-        className={`fixed inset-0 z-30 bg-slate-900/40 transition-opacity duration-200 lg:hidden ${
+        className={`fixed inset-0 z-30 bg-slate-900/40 transition-opacity duration-150 lg:hidden ${
           mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       />
       <aside
-        className={`fixed left-0 top-0 h-full z-40 flex flex-col transform transition-all duration-300 ease-in-out ${
+        className={`fixed left-0 top-0 h-full z-40 flex flex-col transform transition-[transform,width] duration-150 ease-out ${
           collapsed ? 'lg:w-16' : 'lg:w-60'
         } w-72 max-w-[86vw] ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
         style={{ background: '#ffffff' }}
@@ -111,7 +111,7 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle, m
                 <button
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
-                  className={`w-full relative flex items-center justify-center py-2.5 rounded-xl transition-all ${
+                  className={`w-full relative flex items-center justify-center py-2.5 rounded-xl transition-colors ${
                     active ? 'bg-cyan-100 text-cyan-700' : 'text-slate-500 hover:bg-slate-100'
                   }`}
                 >
@@ -133,7 +133,7 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle, m
                     onNavigate(item.id);
                     if (window.innerWidth < 1024) onCloseMobile();
                   }}
-                  className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
+                  className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
                     active
                       ? 'bg-cyan-100 text-cyan-700'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -149,9 +149,9 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle, m
       <div className="px-2 pb-4 space-y-2">
         <button
           onClick={onToggle}
-          className="hidden lg:flex w-full items-center justify-center gap-2 py-2.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all duration-200 text-xs"
+          className="hidden lg:flex w-full items-center justify-center gap-2 py-2.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors text-xs"
         >
-          <Rocket size={14} className={`transition-transform duration-300 ${collapsed ? '' : 'rotate-180'}`} />
+          <Rocket size={14} className={`${collapsed ? '' : 'rotate-180'}`} />
           {!collapsed && <span>Collapse</span>}
         </button>
       </div>

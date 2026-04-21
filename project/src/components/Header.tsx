@@ -73,7 +73,7 @@ export default function Header({ activePage, sidebarCollapsed, onToggleMobileSid
 
   return (
     <header
-      className={`fixed top-0 right-0 z-20 border-b border-white/70 bg-white/85 backdrop-blur-md transition-[left] duration-150 left-0 ${
+      className={`fixed top-0 right-0 z-20 border-b border-white/70 bg-white/95 transition-[left] duration-150 left-0 ${
         sidebarCollapsed ? 'lg:left-16' : 'lg:left-60'
       }`}
     >
@@ -156,7 +156,7 @@ export default function Header({ activePage, sidebarCollapsed, onToggleMobileSid
                 setShowQuickActions((current) => !current);
                 setShowNotifications(false);
               }}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md hover:shadow-blue-500/20 active:scale-95"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors shadow-sm"
             >
               <Plus size={15} />
               <span>New</span>

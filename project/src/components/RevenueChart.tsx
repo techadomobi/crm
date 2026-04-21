@@ -57,7 +57,7 @@ export default function RevenueChart({
   const areaD = `${pathD} L ${pts[pts.length - 1].x} ${H} L ${pts[0].x} ${H} Z`;
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg transition-all duration-300">
+    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
       <div className="flex items-center justify-between mb-5">
         <div>
           <h3 className="text-slate-900 font-semibold text-sm">{title}</h3>

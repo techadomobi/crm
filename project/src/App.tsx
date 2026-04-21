@@ -867,7 +867,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-app-shell">
+    <div className="app-performance-lite min-h-screen bg-app-shell">
       <Sidebar
         activePage={activePage}
         onNavigate={handleNavigate}

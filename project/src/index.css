@@ -40,7 +40,7 @@
 }
 
 @layer base {
-  * {
+  html {
     scroll-behavior: smooth;
   }
 
@@ -50,6 +50,28 @@
     -moz-osx-font-smoothing: grayscale;
     background: #f8fbfd;
     color: #0f172a;
+  }
+}
+
+/* On low-end/touch devices and reduced-motion preference, aggressively cut UI motion in app shell pages. */
+@media (prefers-reduced-motion: reduce), (hover: none) and (pointer: coarse), (max-width: 768px) {
+  .app-performance-lite,
+  .app-performance-lite * {
+    scroll-behavior: auto !important;
+  }
+
+  .app-performance-lite [class*='transition'] {
+    transition-property: none !important;
+    transition-duration: 0ms !important;
+  }
+
+  .app-performance-lite [class*='animate-']:not([class*='animate-spin']) {
+    animation: none !important;
+  }
+
+  .app-performance-lite [class*='backdrop-blur'] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 }
 

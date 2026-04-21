@@ -14,7 +14,7 @@ function PipelineChart({ data }: { data: Array<{ stage: string; count: number }>
   const max = Math.max(...data.map((item) => item.count), 1);
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-lg transition-all duration-300">
+    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
       <div className="flex items-center justify-between mb-5">
         <div>
           <h3 className="text-slate-900 font-semibold text-sm">Deal Pipeline (Live)</h3>
@@ -213,7 +213,7 @@ export default function Dashboard({ displayName, displayEmail }: DashboardProps)
   })();
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
