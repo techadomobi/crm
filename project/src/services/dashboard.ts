@@ -101,7 +101,7 @@ const buildMetricQueryVariants = (base: Record<string, string>) => {
 };
 
 const requestMetricWithFallback = async (
-  endpoints: readonly string[],
+  endpoints: string[],
   preferredKeys: string[],
   queryBase?: Record<string, string>
 ) => {

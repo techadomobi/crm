@@ -20,7 +20,6 @@ import Affiliates from './pages/Affiliates';
 import Advertisers from './pages/Advertisers';
 import PerformanceConsole from './pages/PerformanceConsole';
 import AnalyticsConsole from './pages/AnalyticsConsole';
-import PublicSite from './components/PublicSite';
 import { NavPage } from './types';
 import { AdminLoginPayload, AuthAccountType, repowireApi, SignupPayload } from './api/repowireApi';
 import { ApiError } from './api/httpClient';
@@ -344,14 +343,8 @@ const readCachedDisplayName = () => {
 };
 
 export default function App() {
-  const [currentPath, setCurrentPath] = useState(() => normalizeRoute(window.location.pathname));
-  const normalizedPath = currentPath;
+  const normalizedPath = normalizeRoute(window.location.pathname);
   const isPublicApiDocsRoute = normalizedPath === '/api/docs';
-  const isPublicMarketingRoute =
-    normalizedPath === '/' ||
-    normalizedPath.startsWith('/services') ||
-    normalizedPath.startsWith('/company');
-  const isAuthRoute = normalizedPath === '/auth' || normalizedPath === '/login';
   const [isAuthenticated, setIsAuthenticated] = useState(hasPersistedSession());
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authError, setAuthError] = useState<string | null>(null);
@@ -373,7 +366,6 @@ export default function App() {
     localStorage.removeItem(USER_ROLE_KEY);
     localStorage.removeItem(SESSION_KEY);
     window.history.pushState({}, '', '/');
-    setCurrentPath('/');
     setIsAuthenticated(false);
     setActivePage(getPageFromPath('/'));
     setAuthMode('login');
@@ -424,7 +416,6 @@ export default function App() {
 
   useEffect(() => {
     const onPopState = () => {
-      setCurrentPath(normalizeRoute(window.location.pathname));
       setActivePage(getPageFromPath(window.location.pathname));
     };
 
@@ -441,7 +432,6 @@ export default function App() {
       const nextRoute = pageToRoute[page] ?? `/app/${page}`;
       if (normalizeRoute(window.location.pathname) !== nextRoute) {
         window.history.pushState({}, '', nextRoute);
-        setCurrentPath(nextRoute);
       }
       setActivePage(page);
       setMobileSidebarOpen(false);
@@ -455,7 +445,6 @@ export default function App() {
     const nextRoute = pageToRoute[page] ?? `/app/${page}`;
     if (nextRoute && normalizeRoute(window.location.pathname) !== nextRoute) {
       window.history.pushState({}, '', nextRoute);
-      setCurrentPath(nextRoute);
     }
     setActivePage(page);
     setMobileSidebarOpen(false);
@@ -545,326 +534,9 @@ export default function App() {
       );
     }
 
-    if (isPublicMarketingRoute) {
-      return (
-        <PublicSite
-          onLogin={() => {
-            window.history.pushState({}, '', '/auth');
-            setCurrentPath('/auth');
-            setAuthMode('login');
-          }}
-        />
-      );
-    }
-
-    if (isAuthRoute) {
-      return (
-        <AuthPortal
-          mode={authMode}
-          onModeChange={setAuthMode}
-          authError={authError}
-          isSubmitting={isAuthenticating}
-          onAuthenticate={async ({ mode, accountType, partnersId, email, password, name }) => {
-            const commonPayload = { email: email.trim(), password };
-            const loginAttempts: Array<{ source: string; call: (payload: AdminLoginPayload) => Promise<unknown>; payload: AdminLoginPayload }> = [
-              ...(accountType === 'admin' && partnersId.trim()
-                ? [{ source: '/subAdmin/singleLogin', call: repowireApi.singleLogin, payload: { partners_Id: partnersId.trim(), ...commonPayload } }]
-                : []),
-              ...(accountType === 'admin'
-                ? [
-                    { source: '/subAdmin/login', call: repowireApi.subAdminLogin, payload: commonPayload },
-                    { source: '/admin/login', call: repowireApi.adminLogin, payload: commonPayload },
-                    { source: '/advertiser/login', call: repowireApi.advertiserLogin, payload: commonPayload },
-                    { source: '/publicher/login', call: repowireApi.publicherLogin, payload: commonPayload },
-                  ]
-                : accountType === 'advertiser'
-                  ? [
-                      { source: '/advertiser/login', call: repowireApi.advertiserLogin, payload: commonPayload },
-                      { source: '/admin/login', call: repowireApi.adminLogin, payload: commonPayload },
-                      { source: '/subAdmin/login', call: repowireApi.subAdminLogin, payload: commonPayload },
-                      { source: '/publicher/login', call: repowireApi.publicherLogin, payload: commonPayload },
-                    ]
-                  : [
-                      { source: '/publicher/login', call: repowireApi.publicherLogin, payload: commonPayload },
-                      { source: '/admin/login', call: repowireApi.adminLogin, payload: commonPayload },
-                      { source: '/subAdmin/login', call: repowireApi.subAdminLogin, payload: commonPayload },
-                      { source: '/advertiser/login', call: repowireApi.advertiserLogin, payload: commonPayload },
-                    ]),
-            ];
-
-            const splitName = (rawName?: string) => {
-              const parts = (rawName ?? '').trim().split(/\s+/).filter(Boolean);
-              const firstName = parts[0] ?? 'User';
-              const lastName = parts.slice(1).join(' ') || 'Account';
-              return { firstName, lastName };
-            };
-
-            const tryLoginAny = async () => {
-              let lastError: unknown = null;
-              const attemptedEndpoints: string[] = [];
-
-              for (const login of loginAttempts) {
-                try {
-                  attemptedEndpoints.push(login.source);
-
-                  console.log(`[Auth] Attempting ${login.source} with email=${login.payload.email}`, login.payload.partners_Id ? `partners_Id=${login.payload.partners_Id}` : '(no partners_Id)');
-
-                  const response = await login.call(login.payload);
-
-                  const token = extractToken(response);
-                  const source = login.source;
-
-                  if (token) {
-                    console.log(`[Auth] ✓ Success at ${source}`);
-                    return { token, response, source };
-                  }
-
-                  if (response && typeof response === 'object') {
-                    const respObj = response as Record<string, unknown>;
-                    const message = String(respObj.message ?? respObj.error ?? respObj.msg ?? respObj.responseMessage ?? '').toLowerCase();
-                    const status = String(respObj.status ?? '').toLowerCase();
-                    const responseCode = respObj.responseCode;
-                    const hasErrorCode = typeof responseCode === 'number' && responseCode >= 400;
-
-                    const isErrorResponse =
-                      hasErrorCode ||
-                      message.includes('invalid') ||
-                      message.includes('not found') ||
-                      message.includes('unauthorized') ||
-                      message.includes('forbidden') ||
-                      message.includes('incorrect') ||
-                      message.includes('wrong') ||
-                      message.includes('required') ||
-                      message.includes('doesnt exist') ||
-                      message.includes('does not exist') ||
-                      message.includes('user not found') ||
-                      status === 'failed' ||
-                      status === 'error' ||
-                      status === 'invalid' ||
-                      respObj.success === false ||
-                      respObj.success === 'false' ||
-                      respObj.success === 0;
-
-                    if (isErrorResponse) {
-                      console.log(`[Auth] ✗ Failed at ${source}: ${message || 'Invalid credentials'}`);
-                      lastError = new Error(message && message.length > 0 ? message : 'Invalid credentials');
-                      continue;
-                    }
-
-                    console.log(`[Auth] ✓ Success at ${source}`);
-                    return { token: extractToken(response), response, source };
-                  }
-
-                  console.log(`[Auth] ✗ Failed at ${source}: No response`);
-                  lastError = new Error('No response from server');
-                } catch (error) {
-                  const msg = error instanceof Error ? error.message : String(error);
-                  const lowered = msg.toLowerCase();
-                  if (lowered.includes('404') || lowered.includes('not found')) {
-                    console.log(`[Auth] ✗ Not found at ${login.source}, trying next endpoint`);
-                    lastError = error;
-                    continue;
-                  }
-                  console.log(`[Auth] ✗ Error at ${login.source}: ${msg}`);
-                  lastError = error;
-                }
-              }
-
-              const finalError = lastError ?? new Error('Invalid credentials. Please check your email and password.');
-              console.error(`[Auth] All ${attemptedEndpoints.length} endpoints failed (${attemptedEndpoints.join(' → ')}):`, finalError);
-              throw finalError;
-            };
-
-            const tryRegisterAny = async () => {
-              const { firstName, lastName } = splitName(name);
-              const signupPayload: SignupPayload = {
-                partners_Id: partnersId || undefined,
-                email,
-                password,
-                confirm_password: password,
-                firstName,
-                lastName,
-                name: `${firstName} ${lastName}`,
-                companyName: 'OffersMeta User',
-                mobileNumber: '0000000000',
-                address: 'N/A',
-              };
-
-              const registerAttempts: Array<() => Promise<unknown>> =
-                accountType === 'admin'
-                  ? [() => repowireApi.subAdminSignup(signupPayload)]
-                  : accountType === 'advertiser'
-                    ? [() => repowireApi.advertiserSignup(signupPayload)]
-                    : [() => repowireApi.publicherSignup(signupPayload)];
-
-              let lastError: unknown = null;
-              let lastSuccessResponse: unknown = null;
-
-              for (const register of registerAttempts) {
-                try {
-                  const response = await register();
-
-                  if (response && typeof response === 'object') {
-                    const respObj = response as Record<string, unknown>;
-                    const responseCode = respObj.responseCode;
-                    const message = String(respObj.message ?? respObj.error ?? respObj.msg ?? respObj.responseMessage ?? '').toLowerCase();
-                    const hasErrorCode = typeof responseCode === 'number' && responseCode >= 400;
-
-                    const isErrorResponse =
-                      hasErrorCode ||
-                      message.includes('already exists') ||
-                      message.includes('duplicate') ||
-                      message.includes('email already') ||
-                      message.includes('user exists') ||
-                      message.includes('invalid') ||
-                      message.includes('failed') ||
-                      message.includes('error');
-
-                    if (isErrorResponse) {
-                      if (message.includes('domain already exists')) {
-                        throw new Error('This email is already registered in the system. Please try logging in, or use a different email address for this account type.');
-                      }
-                      if (message.includes('already exists') || message.includes('duplicate') || message.includes('email already') || message.includes('user exists')) {
-                        return null;
-                      }
-                      lastError = new Error(message || 'Registration failed');
-                      continue;
-                    }
-                  }
-
-                  lastSuccessResponse = response;
-                  return response;
-                } catch (error) {
-                  if (error instanceof ApiError) {
-                    const msg = String(error.data ?? error.message).toLowerCase();
-                    if (msg.includes('already exists') || msg.includes('duplicate') || msg.includes('email already') || msg.includes('user exists')) {
-                      return null;
-                    }
-                  }
-                  lastError = error;
-                }
-              }
-
-              if (lastSuccessResponse !== null) {
-                return lastSuccessResponse;
-              }
-
-              if (lastError === null) {
-                return null;
-              }
-
-              throw lastError ?? new Error('Registration failed.');
-            };
-
-            setAuthError(null);
-            setIsAuthenticating(true);
-
-            try {
-              if (mode === 'register') {
-                const registerResult = await tryRegisterAny();
-                const { firstName, lastName } = splitName(name);
-
-                if (registerResult !== null) {
-                  const token = extractToken(registerResult);
-                  if (token) {
-                    localStorage.setItem('repowire_token', token);
-                    localStorage.setItem('repowire_auth_source', 'registration');
-                    localStorage.setItem('repowire_last_auth_mode', 'register');
-                    localStorage.setItem(SESSION_KEY, 'true');
-                    localStorage.setItem(USER_EMAIL_KEY, email.trim());
-                    localStorage.setItem(USER_ROLE_KEY, accountType === 'admin' ? 'Admin' : accountType === 'advertiser' ? 'Advertiser' : 'Publisher');
-
-                    const profileResult = await repowireApi.fetchAccountProfile(accountType, 'registration').catch(() => null);
-                    const registerDisplayName = extractDisplayName(profileResult) ?? extractDisplayName(registerResult) ?? `${firstName} ${lastName}`.trim();
-                    if (registerDisplayName) {
-                      localStorage.setItem(USER_NAME_KEY, registerDisplayName);
-                      setDisplayName(registerDisplayName);
-                    }
-
-                    const partnersId = extractPartnersId(profileResult) ?? extractPartnersId(registerResult);
-                    if (partnersId) {
-                      localStorage.setItem('repowire_partners_id', partnersId);
-                    }
-
-                    setIsAuthenticated(true);
-                    handleNavigate('dashboard');
-                    setIsAuthenticating(false);
-                    return;
-                  }
-                }
-              }
-
-              const { token, source, response } = await tryLoginAny();
-              const extractedPartnersId = extractPartnersId(response);
-
-              if (token) {
-                localStorage.setItem('repowire_token', token);
-                localStorage.setItem('repowire_auth_source', source);
-                localStorage.setItem('repowire_last_auth_mode', mode);
-              } else {
-                localStorage.removeItem('repowire_token');
-                localStorage.setItem('repowire_auth_source', source);
-                localStorage.setItem('repowire_last_auth_mode', mode);
-              }
-              localStorage.setItem(SESSION_KEY, 'true');
-              localStorage.setItem(USER_EMAIL_KEY, email.trim());
-              localStorage.setItem(USER_ROLE_KEY, accountType === 'admin' ? 'Admin' : accountType === 'advertiser' ? 'Advertiser' : 'Publisher');
-
-              if (extractedPartnersId) {
-                localStorage.setItem('repowire_partners_id', extractedPartnersId);
-              }
-
-              const profileResponse = token ? await repowireApi.fetchAccountProfile(accountType, source).catch(() => null) : null;
-              const loginDisplayName =
-                extractDisplayName(profileResponse) ||
-                extractDisplayName(response) ||
-                extractDisplayName(name) ||
-                normalizeDisplayName(localStorage.getItem(USER_NAME_KEY)) ||
-                email.trim().split('@')[0] ||
-                'Account';
-              localStorage.setItem(USER_NAME_KEY, loginDisplayName);
-              setDisplayName(loginDisplayName);
-
-              const profilePartnersId = extractPartnersId(profileResponse);
-              if (profilePartnersId) {
-                localStorage.setItem('repowire_partners_id', profilePartnersId);
-              }
-
-              setIsAuthenticated(true);
-              handleNavigate('dashboard');
-
-              if (!token) {
-                setAuthError('Logged in, but token is not returned by this account. Save token in Settings for full API access.');
-              }
-            } catch (error) {
-              if (error instanceof ApiError) {
-                if (error.status === 0) {
-                  setAuthError('Network error while contacting auth service. Check internet, then try again. If you are on local dev, run the app with npm run dev so /api/proxy is available.');
-                } else if (error.status === 401 || error.status === 403) {
-                  setAuthError(`Authentication failed (${error.status}). Verify email and password are correct. If using SubAdmin, select "Admin" account type.`);
-                } else if (error.status === 400 || error.status === 404 || error.status === 409) {
-                  setAuthError(`${mode === 'register' ? 'Registration' : 'Login'} failed (${error.status}). Check account type matches your credentials (SubAdmin→Admin, Publisher→Publisher, Advertiser→Advertiser).`);
-                } else if (error.status >= 500) {
-                  setAuthError(`Auth service unavailable (${error.status}). Please try again in a few moments.`);
-                } else {
-                  setAuthError(`${mode === 'register' ? 'Registration' : 'Login'} failed (HTTP ${error.status}). ${error.data && typeof error.data === 'object' ? Object.values(error.data).join('. ') : ''}`);
-                }
-              } else if (error instanceof Error) {
-                setAuthError(`${mode === 'register' ? 'Registration' : 'Login'} failed: ${error.message}`);
-              } else {
-                setAuthError(`Unable to complete ${mode === 'register' ? 'registration' : 'login'} right now.`);
-              }
-            } finally {
-              setIsAuthenticating(false);
-            }
-          }}
-        />
-      );
-    }
-
     // Test with simple auth form - comment out to use full AuthPortal
     // return <SimpleAuthTest />;
-
+    
     return (
       <AuthPortal
         mode={authMode}
@@ -1221,7 +893,6 @@ export default function App() {
           localStorage.removeItem(USER_ROLE_KEY);
           localStorage.removeItem(SESSION_KEY);
           window.history.pushState({}, '', '/');
-          setCurrentPath('/');
           setIsAuthenticated(false);
           setAuthMode('login');
           setAuthError(null);

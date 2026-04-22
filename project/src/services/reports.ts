@@ -1,5 +1,4 @@
 import { repowireApi } from '../api/repowireApi';
-import type { ConversionListQuery } from '../api/repowireApi';
 import { asArray } from './utils';
 
 export type ReportScope =
@@ -108,7 +107,7 @@ export const reportsService = {
       return undefined;
     })();
 
-    const conversionFallbackQuery: ConversionListQuery = {
+    const conversionFallbackQuery = {
       page: query.page ?? 1,
       limit: query.limit ?? 200,
       startDate: query.startDate,
